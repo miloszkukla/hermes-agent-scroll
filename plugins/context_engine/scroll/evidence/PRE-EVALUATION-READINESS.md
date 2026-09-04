@@ -2,12 +2,13 @@
 
 ## Current status
 
-**GO for the refreshed ChatGPT Codex OAuth coding candidate.** The task owner
-replaced OpenRouter with ChatGPT Codex OAuth and authorized up to four isolated
-workers. A partial coding run was excluded after an absolute `cd` escaped its
-task workspace; the replacement uses a Bubblewrap read-only checkout boundary.
-The candidate, frozen coding manifest, and independent focused GO are recorded
-in [CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).
+**PAUSED pending focused review of the refreshed ChatGPT Codex OAuth coding
+candidate.** The task owner replaced OpenRouter with ChatGPT Codex OAuth and
+authorized up to four isolated workers. The prior fresh coding runtime exposed
+a post-creation Responses stream that blocked on its first iterator read; the
+replacement bounds that read at the same no-progress deadline. The candidate,
+frozen coding manifest, and pending review record are in
+[CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).
 
 ## Historical Flex decision
 

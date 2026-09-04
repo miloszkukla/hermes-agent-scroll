@@ -2,7 +2,7 @@
 
 ## Status
 
-**GO for a fresh coding lane.** The controlled memory
+**PAUSED pending focused review of a replacement coding lane.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -31,8 +31,12 @@ worker results before two stock automatic-compaction jobs stalled while creating
 their Codex Responses streams. Candidate
 `509393a38fe43db0f14f31e9560904a54197c039` makes that creation deadline-aware,
 closes a late-created stream, and enforces the no-progress deadline even when
-the caller does not supply an explicit timeout. The previous GO is invalidated
-until this candidate and its revised manifest clear focused review.
+the caller does not supply an explicit timeout. Its reviewed fresh runtime then
+wrote 27 raw results before a returned Responses stream blocked in its first
+iterator read. Candidate `757e3cd37160cd942357664139041b3a756eebc8` makes the
+owner poll that consumption path at the same no-progress deadline. The previous
+GO is invalidated until this candidate and its revised manifest clear focused
+review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -45,13 +49,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `509393a38fe43db0f14f31e9560904a54197c039` |
+| Coding implementation commit | `757e3cd37160cd942357664139041b3a756eebc8` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding manifest SHA-256 | `feb2d251571fd87439bf628d606f48342bfd5a842e686508abbed666ca043c74` |
+| Coding manifest SHA-256 | `2b2bdb468d75a0de3a5e0db812b2cb645224643e5c1f6a54162026a96074bf38` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -121,6 +125,15 @@ watchdog's flag; the owner loop still waited on a blocked stream creation. The
 revised candidate treats that flag as a timeout in the owner and adds a direct
 no-timeout regression test. This is a reviewer finding, not an accepted result.
 
+The `live-coding-gated-20260904-r2` runtime is also excluded. It wrote 27 raw
+results but no durable report: the adapter had bounded `responses.create()`,
+but consumed the returned stream on the owner thread, so a blocking first read
+again reached the 600-second host compression ceiling. Candidate
+`757e3cd37160cd942357664139041b3a756eebc8` moves that consumption to an
+attempt-owned daemon and polls the original no-progress deadline. Its direct
+regression covers a returned stream whose first `next()` blocks. Neither the
+46-result nor 27-result runtime will be reused.
+
 ## Completed memory lane
 
 The resumed controlled run produced all 96 expected arms (48 stock and 48
@@ -176,4 +189,7 @@ late-stream cleanup, normal stream behavior, and unchanged four-worker
 OAuth/Bubblewrap boundary. The reviewer reran the relevant suites (225 passed);
 the owner reran the full focused suite (239 passed), Ruff, and `git diff --check`.
 Disposition: **GO — no actionable P0/P1/P2.** This authorizes only a new coding
-runtime; the 46-result blocked-stream runtime remains excluded.
+runtime on `509393a38fe43db0f14f31e9560904a54197c039`; the 46-result
+blocked-stream runtime remains excluded. The later r2 stream-consumption
+failure supersedes this authorization and requires a focused review of
+`757e3cd37160cd942357664139041b3a756eebc8`.
