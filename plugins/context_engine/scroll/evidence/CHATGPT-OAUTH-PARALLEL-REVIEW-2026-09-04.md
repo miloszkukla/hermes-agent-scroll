@@ -2,8 +2,8 @@
 
 ## Status
 
-**PENDING independent candidate-and-manifest review. No live result is
-accepted and no live OAuth request is authorized by this record alone.**
+**GO for the frozen ChatGPT Codex OAuth candidate.** No live result is accepted
+yet; this gate authorizes only a fresh run against the frozen manifests.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -56,7 +56,7 @@ The durable reports intentionally contain no synthesized dollar total because a
 ChatGPT subscription is allowance-based and the previous cross-model dollar
 estimator was invalid.
 
-## Pre-review verification
+## Verification and independent disposition
 
 - `pytest -q tests/evals/test_scroll_*.py tests/plugins/test_scroll_documentation.py`
   — 35 passed.
@@ -66,7 +66,12 @@ estimator was invalid.
 - Both live manifests validate through `validate_live_manifest()` and contain
   no credential field.
 
-The pending review must inspect the complete candidate, both manifests, the
-OAuth credential binding, direct judge environment, no-fallback routing,
-parallel cancellation/order semantics, and source/provenance gates before a
-fresh live run starts.
+Independent reviewer `/root/final_fresh_review` rechecked implementation commit
+`5e03379f916ad563f359d8782b6577c773ac709d` and evidence commit
+`b92a40ca11964231c73076df09d372a652093871`. It found no actionable
+P0/P1/P2: the primary, compression-auxiliary, and judge routes are Codex OAuth
+Responses with no fallback; the worker symlink and judge environment are scoped;
+the restricted coding toolset preserves the four-worker bound; both manifests
+validate and verify provenance; and no synthesized dollar fields remain. Its
+focused suite passed 28 tests, with Ruff and diff checks clean. The reviewer did
+not make an authenticated request.

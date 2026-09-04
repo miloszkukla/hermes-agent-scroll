@@ -2,9 +2,9 @@
 
 ## Status
 
-**SUPERSEDED — the frozen Flex-tier GO below does not authorize execution.**
-The current ChatGPT Codex OAuth candidate, credential-free manifests, and
-pending fresh review scope are recorded in
+**GO for the frozen ChatGPT Codex OAuth candidate; the Flex-tier GO below is
+historical.** The current candidate, credential-free manifests, and independent
+review disposition are recorded in
 [CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).
 The historical candidate and two credential-free live manifests below contain
 no API credential, raw history, answer, trace, corpus, cache, or virtual

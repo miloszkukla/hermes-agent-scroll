@@ -138,6 +138,13 @@ that its auxiliary fallback was priced as Luna. It routes primary, auxiliary,
 and judge calls through `openai-codex`/`codex_responses`, binds each isolated
 worker to the OAuth store by symlink, and reconstructs report rows in frozen
 order after concurrent completion. This is a material route and execution-model
-change. **PENDING fresh independent review; it has no GO and authorizes no live
-request.** The frozen candidate and manifests are recorded in
+change. The frozen candidate and manifests are recorded in
 [CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).
+
+Independent reviewer `/root/final_fresh_review` then rechecked the frozen
+candidate `5e03379f916ad563f359d8782b6577c773ac709d` and evidence commit
+`b92a40ca11964231c73076df09d372a652093871`: **GO. No actionable P0/P1/P2
+remains.** Its focused suite passed 28 tests; Ruff and diff checks were clean.
+The live routes, isolation, restricted coding tool surface, manifest hashes,
+and source/provenance gates were rechecked. No authenticated request occurred
+during review.
