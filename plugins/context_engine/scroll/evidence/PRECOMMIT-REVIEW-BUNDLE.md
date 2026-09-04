@@ -2,9 +2,11 @@
 
 ## Status
 
-**GO for the frozen ChatGPT Codex OAuth candidate; the Flex-tier GO below is
-historical.** The current candidate, credential-free manifests, and independent
-review disposition are recorded in
+**PAUSED pending fresh review of the ChatGPT Codex OAuth candidate; the
+Flex-tier GO below is historical.** A partial coding run was excluded after an
+absolute `cd` escaped its task workspace. The replacement makes the checkout
+read-only to each coding worker under Bubblewrap. The current candidate and
+credential-free manifests are recorded in
 [CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).
 The historical candidate and two credential-free live manifests below contain
 no API credential, raw history, answer, trace, corpus, cache, or virtual

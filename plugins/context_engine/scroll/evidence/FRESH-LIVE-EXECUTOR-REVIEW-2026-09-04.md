@@ -148,3 +148,12 @@ remains.** Its focused suite passed 28 tests; Ruff and diff checks were clean.
 The live routes, isolation, restricted coding tool surface, manifest hashes,
 and source/provenance gates were rechecked. No authenticated request occurred
 during review.
+
+## Bubblewrap coding-boundary amendment
+
+The subsequent fresh coding attempt was excluded after a model-issued absolute
+`cd` reached the checkout. The replacement candidate runs coding workers under
+Bubblewrap with the host filesystem read-only, only the per-worker job tree
+writable, private `/tmp`, and the task workspace as the initial directory.
+The prior GO predates this material isolation change and is superseded pending
+a fresh independent review; no result from the stopped run is accepted.

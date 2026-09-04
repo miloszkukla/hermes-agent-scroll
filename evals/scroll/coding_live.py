@@ -81,6 +81,9 @@ def _sandboxed_worker_command(job_root: Path, job_path: Path, workspace: Path) -
     bwrap = shutil.which("bwrap")
     if bwrap is None:
         raise LiveRunError("coding evaluation requires bubblewrap")
+    job_root = job_root.resolve()
+    job_path = job_path.resolve()
+    workspace = workspace.resolve()
     repository_root = Path(__file__).resolve().parents[2]
     environment = os.environ.copy()
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -108,6 +111,7 @@ def run_coding_evaluation(
     items = _items(manifest)
     scenarios = {item.identifier: item.scenario for item in items}
     runtime_root.mkdir(parents=True, exist_ok=True)
+    runtime_root = runtime_root.resolve()
 
     def execute(arm: str, item, repeat: int) -> Mapping[str, Any]:
         probe = {"id": item.identifier, "type": item.category, "question": item.prompt}

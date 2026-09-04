@@ -2,8 +2,11 @@
 
 ## Status
 
-**GO for the frozen ChatGPT Codex OAuth candidate.** No live result is accepted
-yet; this gate authorizes only a fresh run against the frozen manifests.
+**PAUSED pending a fresh independent review.** The prior OAuth candidate was
+stopped and excluded when a coding worker issued an absolute `cd` into the
+checkout. The worker's partial results are not accepted; its one checkout
+mutation was restored. The replacement runs coding workers under Bubblewrap,
+with the checkout read-only and only that worker's job tree writable.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -15,12 +18,12 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `5e03379f916ad563f359d8782b6577c773ac709d` |
+| Implementation commit | `4735fadb8b94d2190986fe1366b51c07c2d3bd09` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
-| Memory manifest SHA-256 | `86a31fcdb1f234cfbbf98da07c959a7f2fff1cbb89631098eecb3193f9407bdf` |
-| Coding manifest SHA-256 | `11c5f0c4c662d20067a6eb00c70299278a9b75ec0da70ea70f1f88401414ff94` |
+| Memory manifest SHA-256 | `31104d67331eb3cf0408d66db5f3a83b0f28cbc5c32ee4bf69de473014923190` |
+| Coding manifest SHA-256 | `0cda70e322ad2b236825a11075e80bf08023f64f209efa9e87856a38639a96da` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -39,6 +42,10 @@ statistics. It is not sent to the Codex Responses transport.
 - Coding workers expose only terminal, process, and local file-editing tools;
   they cannot call vision, browser vision, or delegation. Their isolated config
   disables smart approval, avoiding its auxiliary-model route.
+- Coding workers run inside Bubblewrap with a read-only host filesystem, a
+  writable bind mount only for that worker's job tree, a private `/tmp`, and
+  their task workspace as the initial working directory. An absolute `cd` can
+  no longer mutate the checkout or another worker's files.
 - The pinned-source memory judge receives the caller's `HERMES_HOME` and the
   Hermes source path explicitly. It resolves its client through the same Codex
   OAuth route rather than an OpenRouter or direct API-key client.
@@ -58,20 +65,16 @@ estimator was invalid.
 
 ## Verification and independent disposition
 
-- `pytest -q tests/evals/test_scroll_*.py tests/plugins/test_scroll_documentation.py`
-  — 35 passed.
+- `pytest -q tests/evals/test_scroll_hermes_live.py tests/evals/test_scroll_paired_runner.py tests/evals/test_scroll_live_manifest.py tests/plugins/test_scroll_documentation.py`
+  — 26 passed.
 - `ruff check evals/scroll tests/evals/test_scroll_paired_runner.py
   tests/evals/test_scroll_live_manifest.py tests/evals/test_scroll_hermes_live.py`
   — passed.
 - Both live manifests validate through `validate_live_manifest()` and contain
   no credential field.
 
-Independent reviewer `/root/final_fresh_review` rechecked implementation commit
-`5e03379f916ad563f359d8782b6577c773ac709d` and evidence commit
-`b92a40ca11964231c73076df09d372a652093871`. It found no actionable
-P0/P1/P2: the primary, compression-auxiliary, and judge routes are Codex OAuth
-Responses with no fallback; the worker symlink and judge environment are scoped;
-the restricted coding toolset preserves the four-worker bound; both manifests
-validate and verify provenance; and no synthesized dollar fields remain. Its
-focused suite passed 28 tests, with Ruff and diff checks clean. The reviewer did
-not make an authenticated request.
+The prior independent review cleared implementation commit
+`5e03379f916ad563f359d8782b6577c773ac709d`, but it predates the Bubblewrap
+containment change and is not a GO for this candidate. A new reviewer must
+recheck the worker boundary, route, manifests, and four-worker cap before a
+fresh live run begins.

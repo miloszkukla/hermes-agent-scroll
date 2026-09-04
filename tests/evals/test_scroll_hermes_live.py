@@ -167,6 +167,21 @@ def test_coding_worker_command_requires_bubblewrap(tmp_path, monkeypatch):
         _sandboxed_worker_command(tmp_path, tmp_path / "job.json", tmp_path)
 
 
+def test_coding_worker_command_resolves_documented_relative_runtime_paths(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    job_root = Path(".scroll-runtime/live-coding/jobs/task")
+    workspace = job_root / "workspace"
+    job_path = job_root / "job.json"
+    workspace.mkdir(parents=True)
+    monkeypatch.setattr("evals.scroll.coding_live.shutil.which", lambda _name: "/usr/bin/bwrap")
+
+    command, _environment = _sandboxed_worker_command(job_root, job_path, workspace)
+
+    assert command[14:16] == [str(job_root.resolve()), str(job_root.resolve())]
+    assert command[17] == str(workspace.resolve())
+    assert command[-1] == str(job_path.resolve())
+
+
 def test_coding_worker_sandbox_blocks_checkout_writes(tmp_path):
     job_root = tmp_path / "job"
     workspace = job_root / "workspace"
