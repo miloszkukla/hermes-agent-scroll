@@ -44,7 +44,10 @@ raw worker results but no report: two stock compressions emitted substantive
 progress yet reached the host's 600-second total ceiling. Candidate
 `a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` freezes a 900-second coding-only
 host ceiling for both arms and binds schema v2 to coding before provenance or
-OAuth. Its successor awaits focused review.
+OAuth. The first schema-v3 resume candidate did not bind its reused artifacts
+to the declared r4 source and received P1/NO-GO. Candidate
+`47b59285c1536dd0c56c4c359a41937b8b732581` pins a checked-in attestation of
+each reusable r4 result and workspace and awaits focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -57,13 +60,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `2ced0b99a4aacfa106a2a0e28ee2ebae4444c25f` |
+| Coding implementation commit | `47b59285c1536dd0c56c4c359a41937b8b732581` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding report manifest digest (canonical JSON SHA-256) | `9c9d41b8f2fbe64114c6efc7593e8f6b3ff5e99fed7369ab6021a3f57758da7e` |
+| Coding report manifest digest (canonical JSON SHA-256) | `71402b7cf959c2a3e3aacbcb23df0f8405f44b88f22f39215f16320e0400db8d` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -76,9 +79,12 @@ The coding manifest is schema v3 and freezes a 1,500-second host ceiling,
 400-second auxiliary timeout (a 1,600-second adapter hard ceiling),
 1,650-second worker timeout, and 1,800-second OAuth lease minimum. This
 preserves the same model, task set, input budgets, compression behavior, and
-four-worker cap for stock and Scroll. Schema v1 is reserved for the completed
-memory lane; each evaluator rejects the other lane's schema before provenance,
-credential, or provider work.
+four-worker cap for stock and Scroll. Its raw attestation hash is
+`d1453c394555ebfa4ca8e89db9514cd96ff9eb75999564f4047bad6adbb62e6f` and
+binds all 28 eligible r4 result bytes and workspace trees to the exact original
+source manifest, implementation, runtime name, and lower timeout envelope.
+Schema v1 is reserved for the completed memory lane; each evaluator rejects
+the other lane's schema before provenance, credential, or provider work.
 
 ## Route and isolation contract
 
@@ -180,9 +186,16 @@ summaries exceeded its 900-second host ceiling. It produced no report and is
 not a completed evaluation. The owner explicitly authorized reuse of only its
 complete rows to avoid re-spending the same run budget. Schema v3 names that
 runtime and prior canonical manifest digest, permits only the declared timeout
-envelope increase, verifies each deterministic job path, final result shape,
-bounded usage, scenario metric, and resulting workspace, and records every
-reused row in the final report. Incomplete r4 jobs remain excluded.
+envelope increase, and pins a checked-in result SHA-256 plus recursive workspace
+SHA-256 for every reusable job. The manifest pins the attestation's byte hash;
+execution verifies both artifact hashes, the deterministic job name, final result
+shape, bounded usage, scenario metric, and resulting workspace before recording
+every reused row in the final report. Incomplete r4 jobs remain excluded.
+
+The focused reviewer rejected the prior schema-v3 implementation as P1/NO-GO
+because the bare result path could be accepted without provenance binding. The
+attested replacement accepts no unlisted job: a listed job fails closed on any
+result or workspace change, while every unlisted/incomplete r4 job runs fresh.
 
 ## Ceiling-schema gate
 
@@ -213,7 +226,7 @@ are not evidence.
 ## Verification and independent disposition
 
 - `pytest -q tests/evals/test_scroll_hermes_live.py tests/evals/test_scroll_coding_trajectories.py tests/evals/test_scroll_paired_runner.py tests/evals/test_scroll_live_manifest.py tests/plugins/test_scroll_documentation.py tests/agent/test_auxiliary_client.py::TestBuildCodexClient tests/agent/test_codex_cloudflare_headers.py`
-  — 237 passed after the resume-provenance correction.
+  — 57 passed for the attested-resume change and broader focused gate.
 - `ruff check agent/auxiliary_client.py evals/scroll/hermes_live.py
   evals/scroll/coding_live.py tests/evals/test_scroll_hermes_live.py
   tests/agent/test_auxiliary_client.py tests/agent/test_codex_cloudflare_headers.py`

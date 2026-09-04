@@ -10,10 +10,11 @@ normal liveness hooks, and preserves timer-owned cancellation cleanup. Its r3
 live run instead showed substantive stream progress but exceeded the shared
 600-second host ceiling. Its r4 successor retained 28 completed results but
 showed the same healthy stream outliving the 900-second envelope. Candidate
-`2ced0b99a4aacfa106a2a0e28ee2ebae4444c25f` freezes aligned 1,500-second host,
-1,600-second adapter, 1,650-second worker, and 30-minute lease bounds. It
-records the task owner's narrow r4 resume authorization and awaits focused
-review. Details are in
+`47b59285c1536dd0c56c4c359a41937b8b732581` freezes aligned 1,500-second host,
+1,600-second adapter, 1,650-second worker, and 30-minute lease bounds. Its
+checked-in attestation locks the task owner's narrow r4 reuse authorization to
+the exact completed result and workspace bytes; incomplete jobs stay fresh. It
+awaits focused review. Details are in
 [CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).
 
 ## Historical Flex decision
