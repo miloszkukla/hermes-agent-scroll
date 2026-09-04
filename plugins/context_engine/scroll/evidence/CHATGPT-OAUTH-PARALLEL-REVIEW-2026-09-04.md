@@ -18,12 +18,12 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `af1d5edc1dfbfa8da94cd07f573fcaef58edef02` |
+| Implementation commit | `490e6417886933550f3bb45e00cf29b5fcbffb31` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
-| Memory manifest SHA-256 | `9c9efd181df0e276a5f998dc1eb31ac6b2750bcc9074c294044671e641117a6a` |
-| Coding manifest SHA-256 | `450a5e6eed5c81feb6582e953684a18e7600173ff1bc48fcf73eff338644e4f3` |
+| Memory manifest SHA-256 | `13c389e74326bcfd24c1bf3c613a7f6f7ed7cedef1007880d79af5b81eae036c` |
+| Coding manifest SHA-256 | `09529593b71c65488fb39c5111f01e847a28b156bfdd9a164f9f640483adfd85` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -49,10 +49,10 @@ statistics. It is not sent to the Codex Responses transport.
   disables smart approval, avoiding its auxiliary-model route.
 - Coding workers run inside Bubblewrap with explicit read-only system and
   source mounts, an empty `/home`, a sanitized environment, a private `/tmp`,
-  and a writable bind mount only for that worker's job tree at `/work`. Their
-  task workspace is the initial working directory. An absolute `cd` can no
-  longer mutate the checkout, another worker's files, or inspect the caller's
-  Hermes home.
+  a read-only resolver file, and a writable bind mount only for that worker's
+  job tree at `/work`. Their task workspace is the initial working directory.
+  An absolute `cd` can no longer mutate the checkout, another worker's files,
+  or inspect the caller's Hermes home.
 - The pinned-source memory judge uses an empty temporary `HERMES_HOME` and its
   leased Codex access token. It has no caller auth store or inherited provider
   environment.
