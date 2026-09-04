@@ -95,10 +95,19 @@ def _sandboxed_worker_command(job_root: Path, job_path: Path, workspace: Path) -
     for part in repository_parts[:-1]:
         current /= part
         home_directories.extend(("--dir", str(current)))
+    resolver_path = Path("/etc/resolv.conf").resolve()
+    if not resolver_path.is_file():
+        raise LiveRunError("coding evaluation DNS resolver is unavailable")
+    resolver_directories = []
+    if resolver_path.parent != Path("/etc"):
+        current = Path("/")
+        for part in resolver_path.parent.parts[1:]:
+            current /= part
+            resolver_directories.extend(("--dir", str(current)))
     environment = {"HOME": "/tmp", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "PATH": os.pathsep.join((str(Path(sys.executable).parent), os.defpath)), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1", "PYTHONPATH": str(repository_root)}
     return [
         bwrap, "--die-with-parent", "--new-session", "--unshare-pid",
-        "--ro-bind", "/usr", "/usr", "--ro-bind", "/usr/local", "/usr/local", "--ro-bind", "/lib", "/lib", "--ro-bind", "/lib64", "/lib64", "--ro-bind", "/bin", "/bin", "--ro-bind", "/sbin", "/sbin", "--ro-bind", "/etc", "/etc", "--tmpfs", "/home", *home_directories, "--ro-bind", str(repository_root), str(repository_root), "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", str(_SANDBOX_JOB_ROOT),
+        "--ro-bind", "/usr", "/usr", "--ro-bind", "/usr/local", "/usr/local", "--ro-bind", "/lib", "/lib", "--ro-bind", "/lib64", "/lib64", "--ro-bind", "/bin", "/bin", "--ro-bind", "/sbin", "/sbin", "--ro-bind", "/etc", "/etc", *resolver_directories, "--ro-bind", str(resolver_path), str(resolver_path), "--tmpfs", "/home", *home_directories, "--ro-bind", str(repository_root), str(repository_root), "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", str(_SANDBOX_JOB_ROOT),
         "--bind", str(job_root), str(_SANDBOX_JOB_ROOT), "--chdir", str(_SANDBOX_JOB_ROOT / "workspace"),
         sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(_SANDBOX_JOB_ROOT / "job.json"),
     ], environment

@@ -186,6 +186,8 @@ def test_coding_worker_command_makes_only_its_job_tree_writable(tmp_path, monkey
 
     assert ["--ro-bind", "/", "/"] not in [command[index:index + 3] for index in range(len(command) - 2)]
     assert ["--tmpfs", "/home"] in [command[index:index + 2] for index in range(len(command) - 1)]
+    resolver_path = str(Path("/etc/resolv.conf").resolve())
+    assert ["--ro-bind", resolver_path, resolver_path] in [command[index:index + 3] for index in range(len(command) - 2)]
     assert ["--bind", str(job_root.resolve()), "/work"] in [command[index:index + 3] for index in range(len(command) - 2)]
     assert ["--chdir", "/work/workspace"] in [command[index:index + 2] for index in range(len(command) - 1)]
     assert command[-4:] == ["-m", "evals.scroll.hermes_live", "--worker", "/work/job.json"]
@@ -225,11 +227,12 @@ def test_coding_worker_sandbox_blocks_checkout_writes(tmp_path):
     command, environment = _sandboxed_worker_command(job_root, job_path, workspace)
     environment["SCROLL_EVAL_CHECKOUT_PATH"] = str(Path(__file__).resolve().parents[2] / "PLAN.md")
     program = (
-        "from pathlib import Path; import os; "
+        "from pathlib import Path; import os, socket; "
         "Path('allowed').write_text('ok'); "
         "checkout = Path(os.environ['SCROLL_EVAL_CHECKOUT_PATH']); "
         "\nif os.access(checkout, os.W_OK):\n raise RuntimeError('sandbox allowed a checkout write')"
         "\nif Path('/home/codex/.hermes/auth.json').exists():\n raise RuntimeError('sandbox exposed caller auth')"
+        "\nif not socket.getaddrinfo('chatgpt.com', 443):\n raise RuntimeError('sandbox DNS failed')"
     )
 
     subprocess.run([*command[:-4], "-c", program], check=True, capture_output=True, text=True, env=environment)
