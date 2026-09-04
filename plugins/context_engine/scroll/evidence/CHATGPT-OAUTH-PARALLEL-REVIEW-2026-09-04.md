@@ -2,17 +2,20 @@
 
 ## Status
 
-**Focused review pending.** Reviewer `/root/final_fresh_review` approved
-implementation commit `490e6417886933550f3bb45e00cf29b5fcbffb31` after
-verifying parent-only OAuth leasing, matched-route auxiliary inheritance, the
-four-worker cap/order, protected lease files, Bubblewrap containment and DNS,
-and manifest provenance. A preflight run then established that this account's
-valid OAuth credentials reside in Hermes's supported `credential_pool` layout,
-not the singleton store. The follow-up accepts only a parent-held pool access
-token with the same 21-minute headroom; it requires focused approval before a
-live lane is restarted. The prior OAuth candidate was stopped and excluded
-when a coding worker issued an absolute `cd` into the checkout. Its partial
-results are not accepted; its one checkout mutation was restored.
+**GO — final focused review completed.** Reviewer `/root/final_fresh_review`
+approved implementation commit `9a53ca9a21ba65f6b5c86089ccedf04a994f7315`
+and evidence pin `27666ea2ea3c2298e11a98e9e42cb81cb7118bb6`. The pool lease
+fails closed unless its JWT has a finite numeric expiry strictly beyond 21
+minutes; direct provenance, focused tests, Ruff, and diff checks passed. The
+prior review approved implementation commit
+`490e6417886933550f3bb45e00cf29b5fcbffb31` after verifying parent-only OAuth
+leasing, matched-route auxiliary inheritance, the four-worker cap/order,
+protected lease files, Bubblewrap containment and DNS. Preflight then
+established that this account's valid OAuth credentials reside in Hermes's
+supported `credential_pool` layout, not the singleton store. The prior OAuth
+candidate was stopped and excluded when a coding worker issued an absolute
+`cd` into the checkout. Its partial results are not accepted; its one checkout
+mutation was restored.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
