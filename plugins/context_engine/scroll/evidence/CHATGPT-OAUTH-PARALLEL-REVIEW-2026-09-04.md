@@ -2,7 +2,7 @@
 
 ## Status
 
-**GO for a fresh coding lane.** The controlled memory
+**NO-GO pending a refreshed coding gate.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -13,7 +13,7 @@ the reviewer's resume-provenance finding be fixed for future runs. Candidate
 `cbc0d324af9966aef1b612d64dd01eac7c56d5ee` binds new saved results to the
 frozen manifest/candidate, arm, task, model, history, and probe before reuse.
 Legacy bare checkpoints rerun under that future policy. Its refreshed coding
-manifest cleared focused review before a fresh coding lane begins. The prior
+manifest cleared focused review before a fresh coding lane began. The prior
 review approved implementation commit `9a53ca9a21ba65f6b5c86089ccedf04a994f7315` and evidence pin
 `27666ea2ea3c2298e11a98e9e42cb81cb7118bb6`. The pool lease fails closed
 unless its JWT has a finite numeric expiry strictly beyond 21 minutes; direct
@@ -26,7 +26,12 @@ established that this account's valid OAuth credentials reside in Hermes's
 supported `credential_pool` layout, not the singleton store. The prior OAuth
 candidate was stopped and excluded when a coding worker issued an absolute
 `cd` into the checkout. Its partial results are not accepted; its one checkout
-mutation was restored.
+mutation was restored. A fresh coding runtime then completed 46 unaccepted
+worker results before two stock automatic-compaction jobs stalled while creating
+their Codex Responses streams. Candidate
+`a505d181a9a6367d0125eab697c0b45b9c3c023f` makes that creation deadline-aware
+and closes a late-created stream. The previous GO is invalidated until this
+candidate and its revised manifest clear focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -39,13 +44,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `cbc0d324af9966aef1b612d64dd01eac7c56d5ee` |
+| Coding implementation commit | `a505d181a9a6367d0125eab697c0b45b9c3c023f` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding manifest SHA-256 | `346f4a308a1e05b90025fc1014ab2d6bfda19a8f91ad69647e718c29bee19ef3` |
+| Coding manifest SHA-256 | `6d36fc83803341dd39648064ec13567bec04c56b347a472d8faa3c8b1e6f6d60` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -94,6 +99,17 @@ The durable reports intentionally contain no synthesized dollar total because a
 ChatGPT subscription is allowance-based and the previous cross-model dollar
 estimator was invalid.
 
+## Unaccepted coding attempt and replacement
+
+The fresh `live-coding-gated-20260904` runtime is excluded. It wrote 46 raw
+worker results but no durable report. Two stock automatic-compaction jobs
+started normal 42K-token auxiliary summary requests and then produced no stream
+for the host's 600-second ceiling; other identical stock jobs completed in
+36–44 seconds. The replacement bounds a blocked `responses.create()` call at
+the adapter's existing no-progress deadline, lets the normal retry path run,
+and closes any stream that arrives after the timeout. No raw result from the
+excluded runtime will be reused.
+
 ## Completed memory lane
 
 The resumed controlled run produced all 96 expected arms (48 stock and 48
@@ -132,5 +148,6 @@ On 2026-09-04, the reviewer checked implementation commit
 provenance-bound future resume, coding-worker compatibility, coding-manifest
 provenance, OAuth/Bubblewrap containment, and the four-worker cap. The focused
 suite passed 237 tests; Ruff and `git diff --check` passed. Disposition:
-**GO — no actionable P0/P1/P2.** This authorizes a new coding runtime only;
+**GO — no actionable P0/P1/P2.** This previous disposition authorized the
+first fresh coding runtime only. It is superseded by the blocked-stream fix;
 the completed 8c memory report remains evidence and does not meet acceptance.

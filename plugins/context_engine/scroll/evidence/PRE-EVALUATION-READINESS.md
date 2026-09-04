@@ -2,11 +2,11 @@
 
 ## Current status
 
-**GO for the refreshed ChatGPT Codex OAuth coding candidate.** The task owner
+**NO-GO pending a refreshed ChatGPT Codex OAuth coding gate.** The task owner
 replaced OpenRouter with ChatGPT Codex OAuth and authorized up to four isolated
 workers. A partial coding run was excluded after an absolute `cd` escaped its
 task workspace; the replacement uses a Bubblewrap read-only checkout boundary.
-The candidate, frozen coding manifest, and independent focused GO are recorded
+The prior candidate, frozen coding manifest, and independent focused GO are recorded
 in [CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).
 
 ## Historical Flex decision
