@@ -2,7 +2,7 @@
 
 ## Status
 
-**PAUSED pending focused review for a fresh replacement coding lane.** The controlled memory
+**GO for a fresh replacement coding lane.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -44,8 +44,7 @@ raw worker results but no report: two stock compressions emitted substantive
 progress yet reached the host's 600-second total ceiling. Candidate
 `a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` freezes a 900-second coding-only
 host ceiling for both arms and binds schema v2 to coding before provenance or
-OAuth. The previous GO is invalidated until this candidate and its revised
-manifest clear focused review.
+OAuth. This candidate and its revised manifest cleared focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -173,8 +172,23 @@ schema v2 was accepted by the memory executor without carrying its ceiling,
 while schema v1 reached the coding executor before its missing ceiling field
 failed. Candidate `a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` resolves this by
 reserving v1 for memory and v2 for coding before provenance, credential, or
-provider work; direct regression coverage asserts both rejections. It awaits a
-new focused disposition.
+provider work; direct regression coverage asserts both rejections.
+
+## Ceiling-schema gate
+
+Independent reviewer: `/root/final_fresh_review`.
+
+On 2026-09-04, the reviewer checked implementation commit
+`a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` and evidence commit
+`a84be5882c9b3413594e7e1ff0a2311970ca3bed`. The reviewer verified that memory
+accepts only schema v1 and coding accepts only schema v2 before provenance or
+OAuth, recomputed the coding report's canonical manifest digest
+`d824f2f401946c5fe6d740474931fc6321400417429449bb650c90ca0f823337`, and
+confirmed the 900-second ceiling is shared by both coding arms and remains
+below the 1,200-second adapter/process ceilings and 21-minute OAuth lease
+headroom. Coding has no resume path, so r3 raw rows cannot be reused. The
+reviewer's relevant suite passed 39 tests. Disposition: **GO — no actionable
+P0/P1/P2.**
 
 ## Completed memory lane
 
