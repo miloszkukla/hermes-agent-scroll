@@ -141,7 +141,7 @@ def run_coding_evaluation(
         job_path = job_root / "job.json"
         _write_private_json(job_path, {
             "lane": "coding", "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
-            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
+            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "context_total_ceiling_seconds": manifest["context_total_ceiling_seconds"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
             "history": item.history(), "probe": dict(probe), "scenario": item.scenario, "runtime_home": str(_SANDBOX_JOB_ROOT / "home"), "workspace": str(_SANDBOX_JOB_ROOT / "workspace"),
             "api_key": _lease_chatgpt_codex_access_token(credential_home), "result_path": str(_SANDBOX_JOB_ROOT / "result.json"),
         })

@@ -410,6 +410,7 @@ def _worker_config(job: Mapping[str, Any]) -> str:
         "compression:\n"
         "  enabled: true\n"
         "  threshold: 0.75\n"
+        f"  context_total_ceiling_seconds: {job.get('context_total_ceiling_seconds', 600)}\n"
         "approvals:\n"
         "  mode: \"off\"\n"
         "auxiliary:\n"

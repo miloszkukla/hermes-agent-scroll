@@ -184,11 +184,12 @@ def test_live_agent_build_uses_the_lease_without_auth_store_resolution():
 
 
 def test_worker_config_pins_compression_and_disables_smart_approval():
-    config = _worker_config({"arm": "scroll", "model": "gpt-5.6-luna", "context_window": 80000, "max_output_tokens": 4096})
+    config = _worker_config({"arm": "scroll", "model": "gpt-5.6-luna", "context_window": 80000, "max_output_tokens": 4096, "context_total_ceiling_seconds": 900})
 
     assert 'mode: "off"' in config
     assert "provider: openai-codex" in config
     assert "api_mode: codex_responses" in config
+    assert "context_total_ceiling_seconds: 900" in config
 
 
 @pytest.mark.parametrize("usage", [{}, {"input_tokens": 1, "output_tokens": 1}, {"input_tokens": 0, "output_tokens": 1, "cache_read_tokens": 0}, {"input_tokens": 1, "output_tokens": 0, "cache_read_tokens": 0}])
