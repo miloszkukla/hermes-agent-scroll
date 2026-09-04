@@ -29,9 +29,10 @@ candidate was stopped and excluded when a coding worker issued an absolute
 mutation was restored. A fresh coding runtime then completed 46 unaccepted
 worker results before two stock automatic-compaction jobs stalled while creating
 their Codex Responses streams. Candidate
-`a505d181a9a6367d0125eab697c0b45b9c3c023f` makes that creation deadline-aware
-and closes a late-created stream. The previous GO is invalidated until this
-candidate and its revised manifest clear focused review.
+`509393a38fe43db0f14f31e9560904a54197c039` makes that creation deadline-aware,
+closes a late-created stream, and enforces the no-progress deadline even when
+the caller does not supply an explicit timeout. The previous GO is invalidated
+until this candidate and its revised manifest clear focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -44,13 +45,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `a505d181a9a6367d0125eab697c0b45b9c3c023f` |
+| Coding implementation commit | `509393a38fe43db0f14f31e9560904a54197c039` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding manifest SHA-256 | `6d36fc83803341dd39648064ec13567bec04c56b347a472d8faa3c8b1e6f6d60` |
+| Coding manifest SHA-256 | `feb2d251571fd87439bf628d606f48342bfd5a842e686508abbed666ca043c74` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -73,6 +74,11 @@ statistics. It is not sent to the Codex Responses transport.
   inherits the already leased access token rather than resolving a credential
   store. Session accounting rejects an auxiliary call using another provider or
   model.
+- The model/provider rationale is the separate
+  [`MODEL-ACCESS-PREFLIGHT.md`](MODEL-ACCESS-PREFLIGHT.md), which applies the
+  `EVALUATION-ERRATA.md` advisory: the upstream harness does not require a
+  Qwen-specific lane, while every live arm must retain its declared model and
+  provider.
 - Coding workers expose only terminal, process, and local file-editing tools;
   they cannot call vision, browser vision, or delegation. Their isolated config
   disables smart approval, avoiding its auxiliary-model route.
@@ -109,6 +115,11 @@ for the host's 600-second ceiling; other identical stock jobs completed in
 the adapter's existing no-progress deadline, lets the normal retry path run,
 and closes any stream that arrives after the timeout. No raw result from the
 excluded runtime will be reused.
+
+The focused reviewer found that the first replacement only set the no-timeout
+watchdog's flag; the owner loop still waited on a blocked stream creation. The
+revised candidate treats that flag as a timeout in the owner and adds a direct
+no-timeout regression test. This is a reviewer finding, not an accepted result.
 
 ## Completed memory lane
 
