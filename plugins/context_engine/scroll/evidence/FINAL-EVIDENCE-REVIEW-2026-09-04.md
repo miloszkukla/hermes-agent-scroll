@@ -2,9 +2,12 @@
 
 ## Status
 
-**PENDING independent final evidence review.** This record preserves the
-completed live lanes and distinguishes their evidence from final acceptance.
-It makes no benchmark-performance or paper-equivalence claim.
+**APPROVED by independent final evidence review.** The reviewer verified the
+warm-selection artifact and its hashes, all 30 unique task/repeat samples,
+manifest and implementation bindings, runtime metadata, percentile calculation,
+and the retained broader host-compaction result. A fresh credential-free runner
+execution also passed the warm-selection gate; the focused evaluator suite had
+45 passing tests. This record makes no paper-equivalence claim.
 
 ## Frozen inputs and reports
 
