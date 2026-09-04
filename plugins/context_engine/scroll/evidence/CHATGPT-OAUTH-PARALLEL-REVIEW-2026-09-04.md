@@ -2,7 +2,7 @@
 
 ## Status
 
-**NO-GO pending a refreshed coding gate.** The controlled memory
+**GO for a fresh coding lane.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -162,3 +162,18 @@ suite passed 237 tests; Ruff and `git diff --check` passed. Disposition:
 **GO — no actionable P0/P1/P2.** This previous disposition authorized the
 first fresh coding runtime only. It is superseded by the blocked-stream fix;
 the completed 8c memory report remains evidence and does not meet acceptance.
+
+## Refreshed coding gate
+
+Independent reviewer: `/root/final_fresh_review`.
+
+On 2026-09-04, the reviewer checked implementation commit
+`509393a38fe43db0f14f31e9560904a54197c039` and evidence/manifest commit
+`0a89203ef30a202a14fe213ac6cfa5073983d7cc`. The reviewer recomputed the coding
+manifest digest `feb2d251571fd87439bf628d606f48342bfd5a842e686508abbed666ca043c74`,
+validated its schema and provenance, and checked the implicit-watchdog timeout,
+late-stream cleanup, normal stream behavior, and unchanged four-worker
+OAuth/Bubblewrap boundary. The reviewer reran the relevant suites (225 passed);
+the owner reran the full focused suite (239 passed), Ruff, and `git diff --check`.
+Disposition: **GO — no actionable P0/P1/P2.** This authorizes only a new coding
+runtime; the 46-result blocked-stream runtime remains excluded.
