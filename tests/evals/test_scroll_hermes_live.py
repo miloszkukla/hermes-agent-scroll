@@ -7,7 +7,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 
 
 def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
@@ -85,6 +85,16 @@ def test_live_agent_uses_openrouter_chat_completions_for_seeded_runs():
     assert captured["provider"] == "openrouter"
     assert captured["api_mode"] == "chat_completions"
     assert captured["request_overrides"] == {"seed": 20260904, "service_tier": "flex"}
+
+
+@pytest.mark.parametrize("usage", [{}, {"input_tokens": 1, "output_tokens": 1}, {"input_tokens": 0, "output_tokens": 1, "cache_read_tokens": 0}, {"input_tokens": 1, "output_tokens": 0, "cache_read_tokens": 0}])
+def test_memory_judge_rejects_incomplete_or_nonpositive_usage(monkeypatch, tmp_path, usage):
+    item = EvaluationItem("longmemeval/case-1", "longmemeval", "single-session-user", "Which?", (), {"answer": "private"})
+    monkeypatch.setattr("evals.scroll.hermes_live.subprocess.run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=json.dumps({"score": 1, "usage": usage})))
+    manifest = {"judge_model": "openai/gpt-5.6-luna", "seed": 1, "service_tier": "flex", "max_output_tokens": 32, "input_price_per_token": 0.1, "output_price_per_token": 0.2, "cache_read_price_per_token": 0.01}
+
+    with pytest.raises(LiveRunError, match="usage"):
+        _judge_item(item, "answer", manifest, tmp_path / "python", tmp_path)
 
 
 def test_coding_workspace_is_registered_for_the_worker_task(tmp_path, monkeypatch):

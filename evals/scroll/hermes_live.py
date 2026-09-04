@@ -463,10 +463,13 @@ def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], 
     usage = result.get("usage") if isinstance(result, dict) else None
     if not isinstance(result, dict) or not isinstance(result.get("score"), (int, float)) or isinstance(result["score"], bool) or not isinstance(usage, dict):
         raise LiveRunError(f"pinned {item.benchmark} judge returned an invalid result")
-    input_tokens = int(usage.get("input_tokens", 0) or 0)
-    output_tokens = int(usage.get("output_tokens", 0) or 0)
-    cache_read_tokens = int(usage.get("cache_read_tokens", 0) or 0)
-    if input_tokens < 0 or output_tokens < 0 or cache_read_tokens < 0:
+    usage_fields = ("input_tokens", "output_tokens", "cache_read_tokens")
+    if any(not isinstance(usage.get(field), int) or isinstance(usage.get(field), bool) for field in usage_fields):
+        raise LiveRunError(f"pinned {item.benchmark} judge returned incomplete usage")
+    input_tokens = usage["input_tokens"]
+    output_tokens = usage["output_tokens"]
+    cache_read_tokens = usage["cache_read_tokens"]
+    if input_tokens < 0 or output_tokens <= 0 or cache_read_tokens < 0 or input_tokens + cache_read_tokens <= 0:
         raise LiveRunError(f"pinned {item.benchmark} judge returned invalid usage")
     cost = input_tokens * float(manifest["input_price_per_token"]) + output_tokens * float(manifest["output_price_per_token"]) + cache_read_tokens * float(manifest["cache_read_price_per_token"])
     return {"score": float(result["score"]), "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cache_read_tokens": cache_read_tokens, "cost_usd": cost}}
