@@ -10,6 +10,7 @@
   "agent_model": "REPLACE_WITH_AGENT_MODEL",
   "judge_model": "REPLACE_WITH_JUDGE_MODEL",
   "judge_source": "REPLACE_WITH_PINNED_JUDGE_SOURCE",
+  "service_tier": "REPLACE_WITH_OPENROUTER_SERVICE_TIER",
   "temperature": null,
   "seed": null,
   "context_window_tokens": null,

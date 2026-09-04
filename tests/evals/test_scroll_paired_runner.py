@@ -20,6 +20,7 @@ def _manifest():
         "agent_model": "approved-agent",
         "judge_model": "approved-judge",
         "judge_source": "pinned-source",
+        "service_tier": "flex",
         "temperature": 0,
         "seed": 1,
         "context_window_tokens": 100,

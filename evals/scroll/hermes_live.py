@@ -297,7 +297,7 @@ def _build_live_agent(factory: Any, job: Mapping[str, Any], session_id: str, db:
         provider="openrouter", api_mode="chat_completions", model=job["model"], session_id=session_id, session_db=db,
         enabled_toolsets=toolsets, quiet_mode=True, skip_context_files=True, skip_memory=True,
         skip_background_review=True, platform="cli", max_iterations=int(job["max_iterations"]),
-        max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False}, request_overrides={"seed": job["seed"]},
+        max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False}, request_overrides={"seed": job["seed"], "service_tier": job["service_tier"]},
     )
 
 
@@ -324,6 +324,8 @@ def _worker_result(job_path: Path) -> None:
         "  compression:\n"
         "    provider: openrouter\n"
         f"    model: {job['model']}\n"
+        "    extra_body:\n"
+        f"      service_tier: {job['service_tier']}\n"
         "    reasoning_effort: none\n"
         f"    max_output_tokens: {job['max_output_tokens']}\n",
         encoding="utf-8",
@@ -409,7 +411,7 @@ class Judge:
         self.client = OpenAI(api_key=os.environ["OPENROUTER_API_KEY"], base_url="https://openrouter.ai/api/v1", max_retries=2, timeout=120)
     def invoke(self, prompt):
         messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else list(prompt)
-        reply = self.client.chat.completions.create(model=payload["model"], messages=messages, seed=payload["seed"], max_tokens=payload["max_output_tokens"])
+        reply = self.client.chat.completions.create(model=payload["model"], messages=messages, seed=payload["seed"], service_tier=payload["service_tier"], max_tokens=payload["max_output_tokens"])
         with lock:
             usage["input_tokens"] += int(getattr(reply.usage, "prompt_tokens", 0) or 0)
             usage["output_tokens"] += int(getattr(reply.usage, "completion_tokens", 0) or 0)
@@ -432,7 +434,7 @@ print(json.dumps({"score": score, "usage": usage}))
 def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], source_python: Path, scroll_source: Path) -> dict[str, Any]:
     payload = {
         "benchmark": item.benchmark, "question_type": item.question_type, "gold": item.gold, "answer": answer,
-        "model": manifest["judge_model"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"],
+        "model": manifest["judge_model"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"],
     }
     try:
         process = subprocess.run(
@@ -505,7 +507,7 @@ def run_live_evaluation(
         job_path = job_root / "job.json"
         job_path.write_text(json.dumps({
             "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
-            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"],
+            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"],
             "input_price_per_token": manifest["input_price_per_token"], "output_price_per_token": manifest["output_price_per_token"],
             "history": item.history, "probe": item.public_probe, "runtime_home": str(job_root / "home"),
             "credential_home": str(credential_home), "result_path": str(result_path),

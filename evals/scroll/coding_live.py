@@ -108,7 +108,7 @@ def run_coding_evaluation(
         job_path = job_root / "job.json"
         job_path.write_text(json.dumps({
             "lane": "coding", "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
-            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"],
+            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"],
             "input_price_per_token": manifest["input_price_per_token"], "output_price_per_token": manifest["output_price_per_token"],
             "history": item.history(), "probe": dict(probe), "scenario": item.scenario, "runtime_home": str(job_root / "home"), "workspace": str(workspace),
             "credential_home": str(credential_home), "result_path": str(result_path),

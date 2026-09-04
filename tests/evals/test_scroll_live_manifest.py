@@ -21,6 +21,7 @@ def _manifest():
         "agent_model": "agent-model",
         "judge_model": "judge-model",
         "judge_source": "pinned-source",
+        "service_tier": "flex",
         "temperature": 0,
         "seed": 1,
         "context_window_tokens": 100,
@@ -61,6 +62,8 @@ def test_live_manifest_requires_a_frozen_symmetric_credential_free_shape():
             validate_live_manifest(nested_credential)
     with pytest.raises(LiveManifestError, match="temperature"):
         validate_live_manifest({**_manifest(), "temperature": True})
+    with pytest.raises(LiveManifestError, match="service_tier"):
+        validate_live_manifest({**_manifest(), "service_tier": "unfrozen"})
     with pytest.raises(LiveManifestError, match="budgets"):
         validate_live_manifest({**_manifest(), "max_output_tokens": 0})
 

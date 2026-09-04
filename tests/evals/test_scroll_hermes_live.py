@@ -80,11 +80,11 @@ def test_live_worker_counts_auxiliary_compression_usage():
 
 
 def test_live_agent_uses_openrouter_chat_completions_for_seeded_runs():
-    captured = _build_live_agent(lambda **kwargs: kwargs, {"model": "openai/gpt-5.6-luna", "max_iterations": 8, "max_output_tokens": 4096, "seed": 20260904}, "session", object(), ["coding"])
+    captured = _build_live_agent(lambda **kwargs: kwargs, {"model": "openai/gpt-5.6-luna", "max_iterations": 8, "max_output_tokens": 4096, "seed": 20260904, "service_tier": "flex"}, "session", object(), ["coding"])
 
     assert captured["provider"] == "openrouter"
     assert captured["api_mode"] == "chat_completions"
-    assert captured["request_overrides"] == {"seed": 20260904}
+    assert captured["request_overrides"] == {"seed": 20260904, "service_tier": "flex"}
 
 
 def test_coding_workspace_is_registered_for_the_worker_task(tmp_path, monkeypatch):

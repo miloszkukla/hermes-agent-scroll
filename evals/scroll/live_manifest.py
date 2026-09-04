@@ -9,7 +9,7 @@ from typing import Any
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _CREDENTIAL_VALUE_RE = re.compile(r"(?:^|\s)(?:basic\s+|bearer\s+|sk-|AIza|gh[pousr]_|xox[baprs]-)", re.IGNORECASE)
-_MANIFEST_KEYS = frozenset({"schema_version", "live_model", "implementation_commit", "plan_sha256", "credential_free_manifest_sha256", "agent_prompt_sha256", "provider", "authentication_mode", "agent_model", "judge_model", "judge_source", "temperature", "seed", "context_window_tokens", "max_iterations", "max_output_tokens", "input_token_budget", "output_token_budget", "input_price_per_token", "output_price_per_token", "cost_ceiling_usd", "source_revisions", "licenses", "datasets", "arms"})
+_MANIFEST_KEYS = frozenset({"schema_version", "live_model", "implementation_commit", "plan_sha256", "credential_free_manifest_sha256", "agent_prompt_sha256", "provider", "authentication_mode", "agent_model", "judge_model", "judge_source", "service_tier", "temperature", "seed", "context_window_tokens", "max_iterations", "max_output_tokens", "input_token_budget", "output_token_budget", "input_price_per_token", "output_price_per_token", "cost_ceiling_usd", "source_revisions", "licenses", "datasets", "arms"})
 _DATASET_KEYS = frozenset({"name", "revision", "item_ids"})
 
 
@@ -50,8 +50,10 @@ def validate_live_manifest(manifest: dict[str, Any]) -> None:
     for key in ("plan_sha256", "credential_free_manifest_sha256", "agent_prompt_sha256"):
         if not _SHA256_RE.fullmatch(str(manifest.get(key, ""))):
             raise LiveManifestError(f"{key} must be a SHA-256")
-    for key in ("provider", "authentication_mode", "agent_model", "judge_model", "judge_source"):
+    for key in ("provider", "authentication_mode", "agent_model", "judge_model", "judge_source", "service_tier"):
         _require(manifest.get(key), key, str)
+    if manifest["service_tier"] not in {"auto", "default", "flex", "priority", "scale"}:
+        raise LiveManifestError("service_tier must be an OpenRouter service tier")
     for key in ("seed", "context_window_tokens", "max_iterations", "max_output_tokens", "input_token_budget", "output_token_budget", "input_price_per_token", "output_price_per_token", "cost_ceiling_usd"):
         _require(manifest.get(key), key, (int, float))
     temperature = manifest.get("temperature")
