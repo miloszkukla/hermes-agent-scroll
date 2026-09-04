@@ -2,11 +2,13 @@
 
 ## Status
 
-**PAUSED pending a fresh independent review.** The prior OAuth candidate was
-stopped and excluded when a coding worker issued an absolute `cd` into the
-checkout. The worker's partial results are not accepted; its one checkout
-mutation was restored. The replacement runs coding workers under Bubblewrap,
-with the checkout read-only and only that worker's job tree writable.
+**GO — independent review completed.** Reviewer `/root/final_fresh_review`
+approved implementation commit `490e6417886933550f3bb45e00cf29b5fcbffb31`
+after verifying parent-only OAuth leasing, matched-route auxiliary inheritance,
+the four-worker cap/order, protected lease files, Bubblewrap containment and
+DNS, and manifest provenance. The prior OAuth candidate was stopped and
+excluded when a coding worker issued an absolute `cd` into the checkout. Its
+partial results are not accepted; its one checkout mutation was restored.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -80,9 +82,9 @@ estimator was invalid.
   — passed.
 - Both live manifests validate through `validate_live_manifest()` and contain
   no credential field.
+- Authentication smoke (no model request): `get_codex_auth_status()` under
+  `HERMES_HOME=/home/codex/.hermes` reported `logged in`.
 
 The prior independent review cleared implementation commit
 `5e03379f916ad563f359d8782b6577c773ac709d`, but it predates the Bubblewrap
-containment change and is not a GO for this candidate. A new reviewer must
-recheck the worker boundary, route, manifests, and four-worker cap before a
-fresh live run begins.
+containment change and is not the approval for this candidate.
