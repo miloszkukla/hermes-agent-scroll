@@ -126,3 +126,18 @@ evaluator-only auxiliary failure-sink propagation, reconstructed costs and
 cache budgets, Flex Chat Completions plumbing, provenance, and symmetric arms.
 The fresh focused reviewer suite passed 35 tests. No live request occurred
 during review. No actionable P0/P1/P2 remains for the frozen manifests.
+
+## ChatGPT OAuth and bounded-parallelism amendment
+
+Candidate: `1f2c212e04d70d5949ce4ebd38c30a725bf6ba37`.
+
+The task owner superseded the OpenRouter Flex route with ChatGPT Codex OAuth
+and authorized up to four isolated workers. The amendment removes the
+cross-model dollar estimate after the unaccepted partial OpenRouter run exposed
+that its auxiliary fallback was priced as Luna. It routes primary, auxiliary,
+and judge calls through `openai-codex`/`codex_responses`, binds each isolated
+worker to the OAuth store by symlink, and reconstructs report rows in frozen
+order after concurrent completion. This is a material route and execution-model
+change. **PENDING fresh independent review; it has no GO and authorizes no live
+request.** The frozen candidate and manifests are recorded in
+[CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).

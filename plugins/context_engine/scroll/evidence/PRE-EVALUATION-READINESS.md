@@ -1,6 +1,14 @@
 # Scroll pre-evaluation readiness
 
-## Decision
+## Current status
+
+**PAUSED — the Flex GO below is historical and does not authorize execution.**
+The task owner replaced OpenRouter with ChatGPT Codex OAuth and authorized up
+to four isolated workers. The new candidate and manifests are recorded in
+[CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md)
+and require a fresh independent review before any live request.
+
+## Historical Flex decision
 
 **GO for the frozen Flex-tier candidate.** The exact implementation candidate,
 credential-free manifests, source and corpus pins, and prior independent review
