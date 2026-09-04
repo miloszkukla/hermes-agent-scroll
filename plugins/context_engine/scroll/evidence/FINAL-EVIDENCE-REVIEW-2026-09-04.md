@@ -2,11 +2,12 @@
 
 ## Status
 
-**SUPERSEDED pending a current memory-lane rerun.** The former approval verified
-the coding lane and warm-selection artifact, but the completed memory lane was
-bound to `8c32e5e…`, before later `agent/auxiliary_client.py` changes. The new
+**PENDING independent final evidence review after the current memory-lane
+rerun.** The former approval verified the coding lane and warm-selection
+artifact, but the completed memory lane was bound to `8c32e5e…`, before later
+`agent/auxiliary_client.py` changes. The new
 `live-memory-rerun-20260905-manifest.json` binds the same frozen data and prompt
-to `5d8cd7a…`; only results attested to that manifest may restore approval.
+to `5d8cd7a…`; the completed result below now requires final review.
 
 ## Frozen inputs and reports
 
@@ -21,6 +22,9 @@ to `5d8cd7a…`; only results attested to that manifest may restore approval.
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
 | Memory manifest digest | `343b3169f912a5426ddceaadd6db7d1a814af2d2e84735a39133addc3c8387d9` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
+| Current-memory implementation commit | `5d8cd7a0ff7c3a39b824a7eea646dc57ba00f2a5` |
+| Current-memory manifest digest | `e09e421dc17858b713d6f9b5102118e5c64f4fa33726046b5e87743abfbd8d8f` |
+| Current-memory report SHA-256 | `14dd0adeec4612a7cd89533a2986a9416de3580ff114b42a31e4405b93b67f33` |
 
 The non-sensitive raw reports remain ignored runtime artifacts at
 `.scroll-runtime/reports/live-coding.json` and
@@ -75,11 +79,17 @@ the two values are intentionally both retained.
 
 ## Completed memory lane
 
-The memory report has all 96 expected arms (48 stock and 48 Scroll) with valid
-agent and judge usage. Aggregate scores were `30.5804/48` stock and
-`21.4991/48` Scroll. This result does not support a Scroll memory-performance
-claim and is not compared with the paper's QwenPaw/backbone-specific published
-scores. It remains complete evidence, not an excluded or normalized run.
+The historical memory report has all 96 expected arms (48 stock and 48 Scroll)
+with valid agent and judge usage. Aggregate scores were `30.5804/48` stock and
+`21.4991/48` Scroll. It remains preserved historical evidence only.
+
+The current rerun used the same frozen 32 LongMemEval and 16 BEAM items, prompt,
+model, budgets, and four-worker paired schedule under the `5d8cd7a…`
+implementation manifest. Its dedicated runtime root began empty; all 96 expected
+arms (48 stock and 48 Scroll) completed with valid agent and judge usage.
+Aggregate scores were `31.1537/48` stock and `23.1262/48` Scroll. It does not
+support a Scroll memory-performance claim and is not compared with the paper's
+QwenPaw/backbone-specific published scores.
 
 ## Final-review checks required
 
