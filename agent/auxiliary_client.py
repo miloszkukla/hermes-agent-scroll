@@ -1947,13 +1947,12 @@ class _CodexCompletionsAdapter:
             _close_client_on_timeout()
 
         try:
-            if total_timeout:
-                timeout_timer[0] = threading.Timer(
-                    max(_effective_deadline() - time.monotonic(), 0.0),
-                    _watchdog_fire,
-                )
-                timeout_timer[0].daemon = True
-                timeout_timer[0].start()
+            timeout_timer[0] = threading.Timer(
+                max(_effective_deadline() - time.monotonic(), 0.0),
+                _watchdog_fire,
+            )
+            timeout_timer[0].daemon = True
+            timeout_timer[0].start()
             _check_cancelled()
 
             # Event-driven Responses streaming via the low-level
@@ -1997,7 +1996,43 @@ class _CodexCompletionsAdapter:
                     _notify_aux_timing_response()
                 _check_cancelled()
 
-            event_stream = self._client.responses.create(**stream_kwargs)
+            # ``responses.create`` can block before yielding an event stream.
+            # Closing the client from the watchdog does not reliably interrupt
+            # that SDK call, so run only stream creation on a daemon and poll
+            # the same deadline used while consuming events. A late stream is
+            # closed by its owner and never becomes visible to this attempt.
+            stream_creation_done = threading.Event()
+            stream_creation: Dict[str, Any] = {}
+            stream_creation_context = contextvars.copy_context()
+
+            def _create_event_stream() -> None:
+                try:
+                    stream = self._client.responses.create(**stream_kwargs)
+                    if timed_out.is_set():
+                        close_fn = getattr(stream, "close", None)
+                        if callable(close_fn):
+                            close_fn()
+                    else:
+                        stream_creation["stream"] = stream
+                except BaseException as exc:
+                    stream_creation["exception"] = exc
+                finally:
+                    stream_creation_done.set()
+
+            threading.Thread(
+                target=stream_creation_context.run,
+                args=(_create_event_stream,),
+                name="hermes-codex-aux-stream-create",
+                daemon=True,
+            ).start()
+            while not stream_creation_done.wait(0.02):
+                _check_cancelled()
+            _check_cancelled()
+            if "exception" in stream_creation:
+                raise stream_creation["exception"]
+            event_stream = stream_creation.get("stream")
+            if event_stream is None:
+                raise RuntimeError("Codex auxiliary Responses stream creation returned no stream")
             with attempt_stream_lock:
                 attempt_stream.append(event_stream)
             # The timer can fire while responses.create() is blocked. If the

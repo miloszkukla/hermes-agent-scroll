@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+import threading
 import time
 from types import SimpleNamespace
 from unittest.mock import patch, MagicMock, AsyncMock
@@ -3270,6 +3271,36 @@ class TestVisionAutoSkipsKimiCoding:
 
 
 class TestCodexAuxiliaryAdapterTimeout:
+    def test_times_out_while_responses_create_is_blocked(self):
+        create_started = threading.Event()
+        release_create = threading.Event()
+        stream_closed = threading.Event()
+
+        class _Stream:
+            def close(self):
+                stream_closed.set()
+
+        class FakeResponses:
+            def create(self, **kwargs):
+                create_started.set()
+                release_create.wait()
+                return _Stream()
+
+        fake_client = SimpleNamespace(responses=FakeResponses(), close=lambda: None)
+        adapter = _CodexCompletionsAdapter(fake_client, "gpt-5.5")
+
+        started = time.monotonic()
+        with pytest.raises(TimeoutError):
+            adapter.create(
+                messages=[{"role": "user", "content": "summarize this"}],
+                timeout=0.05,
+            )
+
+        assert create_started.is_set()
+        assert time.monotonic() - started < 0.14
+        release_create.set()
+        assert stream_closed.wait(1)
+
     def test_forwards_timeout_to_responses_create(self):
         message_item = SimpleNamespace(
             type="message",
