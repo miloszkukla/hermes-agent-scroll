@@ -5,8 +5,11 @@
 **GO for the two frozen live lanes only.** The exact implementation candidate,
 credential-free manifests, source and corpus pins, and independent fresh review
 below are complete. The task owner authorized the OpenRouter credential in
-`/home/codex/.hermes/.env` on 2026-09-04. No live-model request has occurred
-before this record.
+`/home/codex/.hermes/.env` on 2026-09-04. One initial stock worker reached its
+auxiliary compression call but failed before the agent turn because Hermes chose
+the incompatible Codex Responses transport for the frozen seed. Its ignored raw
+trace is excluded from evaluation; the reviewed replacement candidate below
+forces OpenRouter Chat Completions and has no accepted paired result yet.
 
 ## Frozen inputs at this checkpoint
 
@@ -18,9 +21,9 @@ before this record.
 | Credential-free manifest SHA-256 | `b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e` |
 | Stage 0 report SHA-256 | `295aacf7cbadcd197d5b82bd70b6a4d5edb27049099735302acb9541413dc7d3` |
 | Evaluation advisory SHA-256 | `f4fe4183547b18a411e54d2e6c5c9d3b5e7f6ae87f96cd747a499953de0e7939` |
-| Implementation commit | `f86f3bb2f3f3a6de517b82382eb17e30277eb763` |
-| Memory live-manifest SHA-256 | `573680481d35fde73d48a89e0b4797425107f48e8372d8b4422fc3d8d7b58566` |
-| Coding live-manifest SHA-256 | `ac484670fc0f2a5c8da77fee2caa9f963563cc377fbbbd7efc31fdcf7671bb73` |
+| Implementation commit | `c17b49e79c31632802433800eb46d4b17463449c` |
+| Memory live-manifest SHA-256 | `2946a1c850768e9095e0031aa5f3c12939acd96343c5304a32eb63100d8da310` |
+| Coding live-manifest SHA-256 | `78fabb4ed5dfbc1d463d7970385a1cf10e5f854a2cd4acc719334e70165c27b7` |
 | Memory/coding cost ceilings | `$15.00` / `$25.00` |
 
 ## Passing credential-free evidence
@@ -80,6 +83,9 @@ before this record.
   durable host compaction, 100K-token histories with valid failed/retried
   terminal groups, fail-closed source/corpus pinning, and source-CWD judge
   imports. See [FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md](FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md).
+- The transport amendment was independently reviewed with no actionable
+  P0/P1/P2 on `c17b49e79c31632802433800eb46d4b17463449c`; both arms now
+  explicitly use seeded OpenRouter Chat Completions.
 
 ## Completed gate items and execution limits
 

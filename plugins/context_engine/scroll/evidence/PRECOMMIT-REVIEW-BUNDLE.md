@@ -12,13 +12,13 @@ or virtual environment is included.
 Captured on 2026-09-04 against Hermes base
 `29112bef099274229cadff79cdff7bf7b99c4b77` (`v2026.8.31`) on branch
 `codex/scroll-plugin`, candidate
-`f86f3bb2f3f3a6de517b82382eb17e30277eb763`.
+`c17b49e79c31632802433800eb46d4b17463449c`.
 
 | Material | SHA-256 |
 | --- | --- |
-| Complete candidate diff from base (`git diff --binary base..candidate`) | `f81db4bd418cfdedda49393bca91414cc1e95be88d40ab89e2513c1f09a8795b` |
-| Memory live manifest | `573680481d35fde73d48a89e0b4797425107f48e8372d8b4422fc3d8d7b58566` |
-| Coding live manifest | `ac484670fc0f2a5c8da77fee2caa9f963563cc377fbbbd7efc31fdcf7671bb73` |
+| Complete candidate diff from base (`git diff --binary base..candidate`) | `968458b539ed4067756365b3c4289d972f3595aed390f399c546519c89a73451` |
+| Memory live manifest | `2946a1c850768e9095e0031aa5f3c12939acd96343c5304a32eb63100d8da310` |
+| Coding live manifest | `78fabb4ed5dfbc1d463d7970385a1cf10e5f854a2cd4acc719334e70165c27b7` |
 | Plan | `7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210` |
 | Credential-free manifest | `b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e` |
 | Stage 0 report | `295aacf7cbadcd197d5b82bd70b6a4d5edb27049099735302acb9541413dc7d3` |
@@ -49,7 +49,7 @@ candidate and both manifests. It found no actionable P0/P1/P2 after verifying
 the host `_compress_context` lifecycle, valid OpenAI tool-call replay shape,
 100K-token histories, paired bootstrap/p95 accounting, dirty/untracked source
 rejection, LongMemEval corpus hashing, and source-CWD `scroll_eval` imports.
-The disposition is recorded in [FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md](FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md).
+The disposition is recorded in [FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md](FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md), whose transport amendment records the explicit Chat Completions fix in this candidate.
 
 The task owner authorized the two OpenRouter-backed live lanes and delivery
 commits/pushes. The checkpoint precedes all live-model requests.

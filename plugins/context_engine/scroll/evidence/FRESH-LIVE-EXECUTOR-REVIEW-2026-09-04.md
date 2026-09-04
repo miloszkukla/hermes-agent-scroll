@@ -45,3 +45,18 @@ Final disposition: **GO. No actionable P0/P1/P2 remains.**
 - `ruff`, Python compilation, both live-driver `--help` smoke checks, manifest
   validation/provenance, corpus/source checks, and `git diff --check` passed.
 - No authenticated model or judge request occurred during review.
+
+## Transport amendment
+
+Candidate: `c17b49e79c31632802433800eb46d4b17463449c`.
+
+An initial authorized stock worker demonstrated that automatic OpenRouter mode
+selection chose Codex Responses, which rejects the frozen `seed` request field.
+The incomplete attempt has no paired result and is excluded. The replacement
+candidate pins `api_mode="chat_completions"` for both arms and preserves the
+frozen seed in `request_overrides`; a focused test captures provider, transport,
+and seed values without constructing a provider client.
+
+Independent reviewer `/root/final_fresh_review` rechecked the amendment:
+**GO preserved; no actionable P0/P1/P2.** Its focused suite passed 18 tests,
+and the expanded main focused matrix passed 83 tests across 14 files.
