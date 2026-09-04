@@ -1,11 +1,12 @@
 """Live-evaluation loaders keep benchmark gold outside the agent probe."""
 
 import json
+import subprocess
 from contextlib import contextmanager
 
 import pytest
 
-from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, _prepare_coding_scenario, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, _enabled_toolsets, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 
 
 def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
@@ -78,26 +79,50 @@ def test_live_worker_counts_auxiliary_compression_usage():
 
 
 def test_coding_scenarios_drive_manual_selection_and_cold_rebuild(tmp_path):
-    class Compressor:
-        def compress(self, history, *, force):
-            assert force
-            return [*history, {"role": "system", "content": "selected"}]
-
     class Agent:
-        context_compressor = Compressor()
-
         def __init__(self):
             self.closed = False
+
+        def _compress_context(self, history, system_message, *, force):
+            assert force
+            assert system_message == "coding prompt"
+            return [*history, {"role": "system", "content": "selected"}], "rebuilt prompt"
 
         def close(self):
             self.closed = True
 
     original = Agent()
     history = [{"role": "user", "content": "task"}]
-    selected_agent, selected_history = _prepare_coding_scenario(original, history, "manual-compaction", tmp_path, Agent)
+    selected_agent, selected_history = _prepare_coding_scenario(original, history, "coding prompt", "manual-compaction", tmp_path, Agent)
     assert selected_agent is original
     assert selected_history[-1]["content"] == "selected"
     (tmp_path / "cache" / "scroll").mkdir(parents=True)
-    rebuilt_agent, rebuilt_history = _prepare_coding_scenario(original, history, "cache-loss-resume", tmp_path, Agent)
+    rebuilt_agent, rebuilt_history = _prepare_coding_scenario(original, history, "coding prompt", "cache-loss-resume", tmp_path, Agent)
     assert original.closed and rebuilt_agent is not original and rebuilt_history is history
     assert not (tmp_path / "cache" / "scroll").exists()
+
+
+def test_coding_arms_request_the_coding_toolset_and_scroll_context_engine():
+    assert _enabled_toolsets("stock", True) == ["coding"]
+    assert _enabled_toolsets("scroll", True) == ["coding", "context_engine"]
+    assert _enabled_toolsets("stock", False) == []
+    assert _enabled_toolsets("scroll", False) == ["context_engine"]
+    with pytest.raises(LiveRunError, match="unknown evaluation arm"):
+        _enabled_toolsets("other", True)
+
+
+def test_tracked_dirty_source_checkout_is_rejected(tmp_path):
+    def git(*args):
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True, text=True)
+
+    git("init")
+    git("config", "user.email", "eval@example.invalid")
+    git("config", "user.name", "Scroll evaluation")
+    tracked = tmp_path / "tracked.txt"
+    tracked.write_text("clean\n", encoding="utf-8")
+    git("add", "tracked.txt")
+    git("commit", "-m", "fixture")
+    _require_clean_git_checkout(tmp_path, "fixture")
+    tracked.write_text("dirty\n", encoding="utf-8")
+    with pytest.raises(LiveRunError, match="tracked changes"):
+        _require_clean_git_checkout(tmp_path, "fixture")

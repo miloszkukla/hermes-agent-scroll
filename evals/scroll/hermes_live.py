@@ -8,6 +8,7 @@ only frozen identifiers, scores, response digests, and aggregate usage.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
 import json
 import os
@@ -15,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +33,8 @@ AGENT_SYSTEM_PROMPT = (
     "Do not invent facts. State concise, evidence-grounded answers, and explicitly "
     "say when the history does not contain the answer."
 )
+_REQUIRED_LONGMEMEVAL_TYPES = {"knowledge-update": 6, "multi-session": 6, "single-session-assistant": 5, "single-session-preference": 5, "single-session-user": 5, "temporal-reasoning": 5}
+_REQUIRED_BEAM_TYPES = frozenset({"abstention", "contradiction_resolution", "event_ordering", "information_extraction", "instruction_following", "knowledge_update", "multi_session_reasoning", "preference_following", "summarization", "temporal_reasoning"})
 CODING_SYSTEM_PROMPT = (
     "Work on the requested coding task in the current workspace. Use the terminal to inspect "
     "the files and tests, make the smallest correct fix, run the focused tests, and report the result."
@@ -70,6 +74,69 @@ def _read_json(path: Path) -> Any:
         raise LiveRunError(f"could not read evaluation input {path}") from exc
 
 
+def _sha256(path: Path) -> str:
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise LiveRunError(f"could not hash required artifact {path}") from exc
+
+
+def _git_output(args: list[str], failure: str) -> str:
+    try:
+        return subprocess.run(args, check=True, capture_output=True, text=True, timeout=30).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise LiveRunError(failure) from exc
+
+
+def _require_clean_git_checkout(path: Path, label: str) -> None:
+    commands = (
+        ["git", "-C", str(path), "diff", "--quiet"],
+        ["git", "-C", str(path), "diff", "--cached", "--quiet"],
+    )
+    for command in commands:
+        try:
+            subprocess.run(command, check=True, capture_output=True, text=True, timeout=30)
+        except subprocess.CalledProcessError as exc:
+            raise LiveRunError(f"{label} checkout has tracked changes") from exc
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise LiveRunError(f"could not verify {label} checkout cleanliness") from exc
+
+
+def verify_manifest_provenance(manifest: Mapping[str, Any], repository_root: Path) -> None:
+    if _sha256(repository_root / "PLAN.md") != manifest["plan_sha256"]:
+        raise LiveRunError("live manifest plan hash does not match this checkout")
+    if _sha256(repository_root / "evals" / "scroll" / "manifest.json") != manifest["credential_free_manifest_sha256"]:
+        raise LiveRunError("live manifest credential-free manifest hash does not match this checkout")
+    implementation = manifest["implementation_commit"]
+    _git_output(["git", "-C", str(repository_root), "cat-file", "-e", f"{implementation}^{{commit}}"], "live manifest implementation commit is unavailable")
+    _git_output(["git", "-C", str(repository_root), "merge-base", "--is-ancestor", implementation, "HEAD"], "live manifest implementation commit is not an ancestor of HEAD")
+    try:
+        subprocess.run(
+            ["git", "-C", str(repository_root), "diff", "--quiet", implementation, "HEAD", "--", ".", ":(exclude)plugins/context_engine/scroll/evidence/**"],
+            check=True, capture_output=True, text=True, timeout=30,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise LiveRunError("checkout has implementation changes after the live manifest commit") from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise LiveRunError("could not verify live manifest implementation provenance") from exc
+    for command in (
+        ["git", "-C", str(repository_root), "diff", "--quiet", "--", ".", ":(exclude)plugins/context_engine/scroll/evidence/**"],
+        ["git", "-C", str(repository_root), "diff", "--cached", "--quiet", "--", ".", ":(exclude)plugins/context_engine/scroll/evidence/**"],
+    ):
+        try:
+            subprocess.run(command, check=True, capture_output=True, text=True, timeout=30)
+        except subprocess.CalledProcessError as exc:
+            raise LiveRunError("checkout has uncommitted implementation changes") from exc
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise LiveRunError("could not verify live manifest implementation provenance") from exc
+    untracked = _git_output(
+        ["git", "-C", str(repository_root), "ls-files", "--others", "--exclude-standard", "--", ".", ":(exclude)plugins/context_engine/scroll/evidence/**"],
+        "could not verify live manifest implementation provenance",
+    )
+    if untracked:
+        raise LiveRunError("checkout has uncommitted implementation changes")
+
+
 def _history_row(session: int, date: str | None, role: str, content: str) -> dict[str, str]:
     tag = f"[Session {session} | {date}]" if date else f"[Session {session}]"
     return {"role": role, "content": f"{tag} {role}: {content.strip()}"}
@@ -87,19 +154,28 @@ def _auxiliary_usage(db: Any, session_id: str) -> tuple[int, int]:
         raise LiveRunError("could not account for auxiliary evaluation usage") from exc
 
 
-def _prepare_coding_scenario(agent: Any, history: list[dict[str, Any]], scenario: str, runtime_home: Path, rebuild: Any) -> tuple[Any, list[dict[str, Any]]]:
+def _prepare_coding_scenario(agent: Any, history: list[dict[str, Any]], system_message: str, scenario: str, runtime_home: Path, rebuild: Any) -> tuple[Any, list[dict[str, Any]]]:
     if scenario == "automatic-compaction":
         return agent, history
     if scenario == "manual-compaction":
-        compress = getattr(getattr(agent, "context_compressor", None), "compress", None)
+        compress = getattr(agent, "_compress_context", None)
         if not callable(compress):
-            raise LiveRunError("coding manual-compaction arm has no context compressor")
-        return agent, compress(history, force=True)
+            raise LiveRunError("coding manual-compaction arm has no host compression lifecycle")
+        compressed, _ = compress(history, system_message, force=True)
+        return agent, compressed
     if scenario == "cache-loss-resume":
         agent.close()
         shutil.rmtree(runtime_home / "cache" / "scroll", ignore_errors=True)
         return rebuild(), history
     raise LiveRunError(f"unknown coding scenario: {scenario}")
+
+
+def _enabled_toolsets(arm: str, coding: bool) -> list[str]:
+    if arm not in {"stock", "scroll"}:
+        raise LiveRunError(f"unknown evaluation arm: {arm}")
+    if coding:
+        return ["coding", "context_engine"] if arm == "scroll" else ["coding"]
+    return ["context_engine"] if arm == "scroll" else []
 
 
 def load_longmemeval_items(dataset_path: Path, identifiers: Sequence[str]) -> list[EvaluationItem]:
@@ -180,10 +256,34 @@ def load_manifest_items(manifest: Mapping[str, Any], *, longmemeval_path: Path, 
     expected = {"longmemeval", "beam"}
     if set(datasets) != expected:
         raise LiveRunError("live manifest must freeze exactly longmemeval and beam")
-    return [
-        *load_longmemeval_items(longmemeval_path, datasets["longmemeval"]),
-        *load_beam_items(beam_chats_root, datasets["beam"]),
-    ]
+    longmemeval = load_longmemeval_items(longmemeval_path, datasets["longmemeval"])
+    beam = load_beam_items(beam_chats_root, datasets["beam"])
+    if len(longmemeval) != 32 or len(beam) != 16:
+        raise LiveRunError("memory manifest must retain exactly 32 LongMemEval and 16 BEAM items")
+    if Counter(item.question_type for item in longmemeval) != _REQUIRED_LONGMEMEVAL_TYPES:
+        raise LiveRunError("memory manifest LongMemEval selection is not the frozen stratified set")
+    if {item.question_type for item in beam} != _REQUIRED_BEAM_TYPES:
+        raise LiveRunError("memory manifest BEAM selection is not the frozen type coverage")
+    return [*longmemeval, *beam]
+
+
+def verify_memory_inputs(manifest: Mapping[str, Any], longmemeval_path: Path, beam_chats_root: Path) -> None:
+    revisions = manifest["source_revisions"]
+    longmemeval_root = longmemeval_path.parents[1]
+    beam_root = beam_chats_root.parent
+    _require_clean_git_checkout(longmemeval_root, "LongMemEval source")
+    _require_clean_git_checkout(beam_root, "BEAM source")
+    if _git_output(["git", "-C", str(longmemeval_root), "rev-parse", "HEAD"], "could not verify LongMemEval source revision") != revisions.get("longmemeval"):
+        raise LiveRunError("LongMemEval source revision does not match the live manifest")
+    if _git_output(["git", "-C", str(beam_root), "rev-parse", "HEAD"], "could not verify BEAM source revision") != revisions.get("beam"):
+        raise LiveRunError("BEAM source revision does not match the live manifest")
+    expected_hash = ""
+    for part in str(next(dataset["revision"] for dataset in manifest["datasets"] if dataset["name"] == "longmemeval")).split(";"):
+        part = part.strip()
+        if part.startswith("sha256:"):
+            expected_hash = part.removeprefix("sha256:")
+    if len(expected_hash) != 64 or _sha256(longmemeval_path) != expected_hash:
+        raise LiveRunError("LongMemEval corpus hash does not match the live manifest")
 
 
 def _worker_result(job_path: Path) -> None:
@@ -226,7 +326,7 @@ def _worker_result(job_path: Path) -> None:
     db.create_session(session_id, source="eval", model=job["model"])
     db.append_messages_batch(session_id, job["history"], chunk_rows=256)
     history = db.get_messages_as_conversation(session_id, repair_alternation=True, include_row_ids=True)
-    toolsets = ["context_engine"] if job["arm"] == "scroll" else []
+    toolsets = _enabled_toolsets(job["arm"], coding)
     agent = None
     try:
         def build_agent():
@@ -239,14 +339,17 @@ def _worker_result(job_path: Path) -> None:
             )
 
         agent = build_agent()
+        scenario_latency_seconds = 0.0
         if coding:
             from agent.aux_accounting import reset_accounting_context, set_accounting_context
 
+            scenario_started = time.monotonic()
             accounting_token = set_accounting_context(db, session_id)
             try:
-                agent, history = _prepare_coding_scenario(agent, history, str(job.get("scenario") or ""), runtime_home, build_agent)
+                agent, history = _prepare_coding_scenario(agent, history, CODING_SYSTEM_PROMPT, str(job.get("scenario") or ""), runtime_home, build_agent)
             finally:
                 reset_accounting_context(accounting_token)
+            scenario_latency_seconds = time.monotonic() - scenario_started
         response = agent.run_conversation(
             job["probe"]["question"], system_message=CODING_SYSTEM_PROMPT if coding else AGENT_SYSTEM_PROMPT,
             conversation_history=history,
@@ -262,6 +365,7 @@ def _worker_result(job_path: Path) -> None:
         cost = input_tokens * float(job["input_price_per_token"]) + output_tokens * float(job["output_price_per_token"])
         Path(job["result_path"]).write_text(json.dumps({
             "answer": answer, "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost},
+            "scenario_latency_seconds": scenario_latency_seconds,
         }), encoding="utf-8")
     finally:
         if agent is not None:
@@ -303,7 +407,7 @@ print(json.dumps({"score": score, "usage": usage}))
 '''
 
 
-def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], source_python: Path) -> dict[str, Any]:
+def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], source_python: Path, scroll_source: Path) -> dict[str, Any]:
     payload = {
         "benchmark": item.benchmark, "question_type": item.question_type, "gold": item.gold, "answer": answer,
         "model": manifest["judge_model"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"],
@@ -311,7 +415,7 @@ def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], 
     try:
         process = subprocess.run(
             [str(source_python), "-c", _JUDGE_PROGRAM], input=json.dumps(payload), text=True,
-            capture_output=True, check=True, timeout=600,
+            cwd=scroll_source, capture_output=True, check=True, timeout=600,
         )
         result = json.loads(process.stdout)
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
@@ -335,20 +439,25 @@ def run_live_evaluation(
     if not isinstance(manifest, dict):
         raise LiveRunError("live manifest must be a JSON object")
     validate_live_manifest(manifest)
+    repository_root = Path(__file__).resolve().parents[2]
+    verify_manifest_provenance(manifest, repository_root)
     if manifest["agent_prompt_sha256"] != agent_prompt_sha256():
         raise LiveRunError("live manifest does not freeze this executor's agent prompt")
-    try:
-        source_commit = subprocess.run(
-            ["git", "-C", str(scroll_source), "rev-parse", "HEAD"], check=True,
-            capture_output=True, text=True, timeout=30,
-        ).stdout.strip()
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise LiveRunError("could not verify pinned Scroll source revision") from exc
+    source_commit = _git_output(["git", "-C", str(scroll_source), "rev-parse", "HEAD"], "could not verify pinned Scroll source revision")
     if source_commit != manifest["source_revisions"].get("scroll"):
         raise LiveRunError("pinned Scroll source revision does not match the live manifest")
+    _require_clean_git_checkout(scroll_source, "pinned Scroll source")
     source_python = scroll_source / ".venv" / "bin" / "python"
     if not source_python.is_file():
         raise LiveRunError("pinned Scroll evaluation environment is unavailable")
+    source_module = _git_output(
+        [str(source_python), "-c", "import scroll_eval; from pathlib import Path; print(Path(scroll_eval.__file__).resolve())"],
+        "pinned Scroll evaluation environment cannot import scroll_eval",
+    )
+    try:
+        Path(source_module).resolve().relative_to((scroll_source / "evaluation" / "scroll_eval").resolve())
+    except ValueError as exc:
+        raise LiveRunError("pinned Scroll evaluation environment imports an unexpected scroll_eval") from exc
     if not credential_home.is_dir():
         raise LiveRunError("credential home is unavailable")
     from hermes_cli.env_loader import load_hermes_dotenv
@@ -356,6 +465,7 @@ def run_live_evaluation(
     load_hermes_dotenv(hermes_home=credential_home, load_external_secrets=False)
     if not os.environ.get("OPENROUTER_API_KEY"):
         raise LiveRunError("OpenRouter credential was not loaded")
+    verify_memory_inputs(manifest, longmemeval_path, beam_chats_root)
     items = load_manifest_items(manifest, longmemeval_path=longmemeval_path, beam_chats_root=beam_chats_root)
     by_id = {item.identifier: item for item in items}
     if len(by_id) != len(items):
@@ -390,7 +500,7 @@ def run_live_evaluation(
         item = by_id.get(str(probe.get("id")))
         if item is None:
             raise LiveRunError("judge received an unfrozen probe")
-        return _judge_item(item, answer, manifest, source_python)
+        return _judge_item(item, answer, manifest, source_python, scroll_source)
 
     try:
         report = run_paired_evaluation(manifest, [item.public_probe for item in items], execute, judge)

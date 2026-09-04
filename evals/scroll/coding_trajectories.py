@@ -7,6 +7,10 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+
+CANONICAL_HISTORY_MIN_TOKENS = 100_000
 
 
 @dataclass(frozen=True)
@@ -17,18 +21,30 @@ class CodingTrajectory:
     prompt: str
     history_seed: str
 
-    def history(self) -> tuple[dict[str, str], ...]:
+    def history(self) -> tuple[dict[str, Any], ...]:
+        failed_call = f"call-{self.identifier.rsplit('/', 1)[-1]}-failed"
+        retried_call = f"call-{self.identifier.rsplit('/', 1)[-1]}-retry"
         entries = [
             {"role": "user", "content": f"Continue task {self.identifier}. Preserve APIs and use the focused test as the executable contract."},
-            {"role": "assistant", "content": "I will inspect the workspace, run the focused test, then make the smallest repair."},
-            {"role": "user", "content": "The prior terminal call failed because the test command used the wrong working directory. Retry from the task workspace."},
-            {"role": "assistant", "content": "I will retry the tool call and keep the failure evidence in mind."},
+            {"role": "assistant", "content": "I will inspect the workspace and run the focused test.", "tool_calls": [{"id": failed_call, "name": "terminal", "arguments": '{"command":"cd /tmp/wrong-workspace && python -m pytest -q"}'}]},
+            {"role": "tool", "tool_name": "terminal", "tool_call_id": failed_call, "content": "bash: cd: /tmp/wrong-workspace: No such file or directory\nexit status 1"},
+            {"role": "assistant", "content": "The terminal failure is a wrong-working-directory failure; I will retry in the task workspace."},
+            {"role": "user", "content": "Retry from the task workspace and retain the failing-test evidence."},
+            {"role": "assistant", "content": "I will retry the focused test from the correct workspace.", "tool_calls": [{"id": retried_call, "name": "terminal", "arguments": '{"command":"python -m pytest -q"}'}]},
+            {"role": "tool", "tool_name": "terminal", "tool_call_id": retried_call, "content": "2 failed, 1 passed in 0.12s\nAssertionError: expected normalized output"},
+            {"role": "assistant", "content": "The retry reached the focused test and recorded the repair target."},
         ]
-        chunk = (f"build {self.identifier} {self.history_seed} " * 140).strip()
+        chunk = (f"build {self.identifier} {self.history_seed} " * 210).strip()
         for number in range(56):
             entries.append({"role": "user", "content": f"Build/test log chunk {number:02d}: {chunk}"})
             entries.append({"role": "assistant", "content": f"Recorded log chunk {number:02d}; no source change is complete yet."})
         return tuple(entries)
+
+
+def canonical_history_tokens(trajectory: CodingTrajectory) -> int:
+    from agent.model_metadata import estimate_request_tokens_rough
+
+    return estimate_request_tokens_rough(list(trajectory.history()))
 
 
 def _category(index: int) -> str:

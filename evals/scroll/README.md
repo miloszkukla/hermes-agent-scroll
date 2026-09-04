@@ -47,7 +47,12 @@ fixed 20 coding trajectories in fresh workspaces. Those tasks start failing and
 use an objective local `pytest` verifier rather than a memory-benchmark judge.
 They cover automatic compaction, manual selection, and cold resume after a
 Scroll-cache loss, with multi-file repairs, failed/retried tool context, and
-long build/test-log history in each trajectory.
+long build/test-log history in each trajectory. Every trajectory has a
+minimum 100K-token rough canonical history, includes two actual durable
+terminal call/result groups (one failed and one retried), and runs five paired
+repeats. The coding report measures manual host-compaction selection and
+post-cache-loss agent construction separately from provider execution; its p95
+thresholds therefore cover only the required selection/rebuild operations.
 
 Both drivers load `OPENROUTER_API_KEY` only from the caller's Hermes home at
 run time. The key, raw corpus histories, model answers, generated workspaces,
@@ -78,4 +83,7 @@ auxiliary call, and every judge call.
 The coding manifest declares `none-objective-verifier` as a non-model judge;
 its cost is solely the two agent arms. Any changed source, model, prompt,
 dataset, task set, budget, seed, or manifest requires a new review gate and a
-new paired run.
+new paired run. Both live drivers fail closed if the candidate checkout, the
+pinned Scroll judge source, or the tracked LongMemEval/BEAM source trees have
+changed; the LongMemEval corpus file is additionally SHA-256 pinned and the
+judge environment must import `scroll_eval` from the pinned source checkout.

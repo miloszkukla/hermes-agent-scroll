@@ -2,8 +2,8 @@
 
 import pytest
 
-from evals.scroll.coding_live import _items
-from evals.scroll.coding_trajectories import TRAJECTORIES, verify_workspace, write_workspace
+from evals.scroll.coding_live import _items, _percentile, paired_bootstrap_lower_bound
+from evals.scroll.coding_trajectories import CANONICAL_HISTORY_MIN_TOKENS, TRAJECTORIES, canonical_history_tokens, verify_workspace, write_workspace
 from evals.scroll.hermes_live import LiveRunError
 
 
@@ -13,6 +13,9 @@ def test_coding_trajectories_are_complete_and_cover_required_scenarios():
     assert {item.scenario for item in TRAJECTORIES} == {"automatic-compaction", "manual-compaction", "cache-loss-resume"}
     assert {item.category for item in TRAJECTORIES} == {"labels", "flags", "limits", "routes", "render"}
     assert all(len(item.history()) > 100 for item in TRAJECTORIES)
+    assert all(canonical_history_tokens(item) >= CANONICAL_HISTORY_MIN_TOKENS for item in TRAJECTORIES)
+    assert all(any(message["role"] == "tool" for message in item.history()) for item in TRAJECTORIES)
+    assert all(sum(bool(message.get("tool_calls")) for message in item.history()) == 2 for item in TRAJECTORIES)
 
 
 def test_coding_workspace_starts_failing_and_reference_repair_is_not_present(tmp_path):
@@ -31,3 +34,9 @@ def test_coding_manifest_requires_the_exact_fixed_ordered_set():
     manifest["datasets"][0]["item_ids"].reverse()
     with pytest.raises(LiveRunError, match="complete fixed ordered"):
         _items(manifest)
+
+
+def test_coding_statistics_are_paired_and_deterministic():
+    assert paired_bootstrap_lower_bound([0.25] * 20, seed=7) == 0.25
+    assert paired_bootstrap_lower_bound([-0.1] * 20, seed=7) == -0.1
+    assert _percentile([0.1, 0.2, 0.3, 0.4, 0.5], 0.95) == 0.5

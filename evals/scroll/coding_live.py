@@ -5,18 +5,24 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
+import random
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Mapping
 
 from hermes_cli.env_loader import load_hermes_dotenv
 
-from .coding_trajectories import TRAJECTORIES, by_identifier, verify_workspace, write_workspace
-from .hermes_live import LiveRunError, coding_prompt_sha256
+from .coding_trajectories import CANONICAL_HISTORY_MIN_TOKENS, TRAJECTORIES, by_identifier, canonical_history_tokens, verify_workspace, write_workspace
+from .hermes_live import LiveRunError, coding_prompt_sha256, verify_manifest_provenance
 from .live_manifest import validate_live_manifest
-from .paired_runner import PairedRunError, run_paired_evaluation
+
+
+_REPEATS = 5
+_BOOTSTRAP_RESAMPLES = 10_000
 
 
 def _read_manifest(path: Path) -> dict[str, Any]:
@@ -37,7 +43,42 @@ def _items(manifest: Mapping[str, Any]):
     expected = tuple(trajectory.identifier for trajectory in TRAJECTORIES)
     if identifiers != expected:
         raise LiveRunError("coding manifest must retain the complete fixed ordered trajectory set")
-    return tuple(by_identifier(identifier) for identifier in identifiers)
+    items = tuple(by_identifier(identifier) for identifier in identifiers)
+    if any(canonical_history_tokens(item) < CANONICAL_HISTORY_MIN_TOKENS for item in items):
+        raise LiveRunError("coding trajectories must retain 100K-token canonical histories")
+    return items
+
+
+def _usage(value: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, float | int]:
+    raw = value.get("usage")
+    if not isinstance(raw, Mapping):
+        raise LiveRunError("coding executor usage is unavailable")
+    result = {}
+    for key, limit in (("input_tokens", manifest["input_token_budget"]), ("output_tokens", manifest["output_token_budget"])):
+        number = raw.get(key)
+        if not isinstance(number, (int, float)) or isinstance(number, bool) or number < 0 or number > limit:
+            raise LiveRunError(f"coding executor usage.{key} violates the frozen budget")
+        result[key] = number
+    cost = raw.get("cost_usd")
+    if not isinstance(cost, (int, float)) or isinstance(cost, bool) or cost < 0:
+        raise LiveRunError("coding executor usage.cost_usd is invalid")
+    result["cost_usd"] = cost
+    return result
+
+
+def _percentile(values: list[float], quantile: float) -> float:
+    if not values:
+        raise LiveRunError("coding performance sample is empty")
+    ordered = sorted(values)
+    return ordered[max(0, math.ceil(quantile * len(ordered)) - 1)]
+
+
+def paired_bootstrap_lower_bound(deltas: list[float], *, seed: int, resamples: int = _BOOTSTRAP_RESAMPLES) -> float:
+    if not deltas or resamples <= 0:
+        raise LiveRunError("paired bootstrap requires completed paired outcomes")
+    rng = random.Random(seed)
+    means = sorted(sum(rng.choice(deltas) for _ in deltas) / len(deltas) for _ in range(resamples))
+    return means[max(0, math.ceil(0.05 * resamples) - 1)]
 
 
 def run_coding_evaluation(
@@ -46,6 +87,7 @@ def run_coding_evaluation(
 ) -> dict[str, Any]:
     manifest = _read_manifest(manifest_path)
     validate_live_manifest(manifest)
+    verify_manifest_provenance(manifest, Path(__file__).resolve().parents[2])
     if manifest["agent_prompt_sha256"] != coding_prompt_sha256():
         raise LiveRunError("coding manifest does not freeze this executor's agent prompt")
     if not credential_home.is_dir():
@@ -54,14 +96,12 @@ def run_coding_evaluation(
     if not os.environ.get("OPENROUTER_API_KEY"):
         raise LiveRunError("OpenRouter credential was not loaded")
     items = _items(manifest)
-    by_id = {item.identifier: item for item in items}
+    scenarios = {item.identifier: item.scenario for item in items}
     runtime_root.mkdir(parents=True, exist_ok=True)
 
-    def execute(arm: str, probe: Mapping[str, str]) -> Mapping[str, Any]:
-        item = by_id.get(probe["id"])
-        if item is None or probe != {"id": item.identifier, "type": item.category, "question": item.prompt}:
-            raise LiveRunError("coding executor received an unfrozen model probe")
-        job_root = runtime_root / "jobs" / hashlib.sha256(f"{arm}:{item.identifier}".encode()).hexdigest()
+    def execute(arm: str, item, repeat: int) -> Mapping[str, Any]:
+        probe = {"id": item.identifier, "type": item.category, "question": item.prompt}
+        job_root = runtime_root / "jobs" / hashlib.sha256(f"{arm}:{item.identifier}:{repeat}".encode()).hexdigest()
         workspace = job_root / "workspace"
         write_workspace(item, workspace)
         result_path = job_root / "result.json"
@@ -73,6 +113,7 @@ def run_coding_evaluation(
             "history": item.history(), "probe": dict(probe), "scenario": item.scenario, "runtime_home": str(job_root / "home"), "workspace": str(workspace),
             "credential_home": str(credential_home), "result_path": str(result_path),
         }), encoding="utf-8")
+        started = time.monotonic()
         try:
             subprocess.run([sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(job_path)], cwd=Path(__file__).resolve().parents[2], check=True, capture_output=True, text=True, timeout=1_200)
             result = json.loads(result_path.read_text(encoding="utf-8"))
@@ -80,17 +121,42 @@ def run_coding_evaluation(
             raise LiveRunError(f"Hermes {arm} coding arm failed for {item.identifier}") from exc
         if not isinstance(result, dict) or not isinstance(result.get("answer"), str) or not isinstance(result.get("usage"), dict):
             raise LiveRunError(f"Hermes {arm} coding arm produced an invalid result")
-        return {"answer": "verified-pass" if verify_workspace(workspace) else "verified-fail", "usage": result["usage"]}
+        scenario_latency = result.get("scenario_latency_seconds")
+        if not isinstance(scenario_latency, (int, float)) or isinstance(scenario_latency, bool) or scenario_latency < 0:
+            raise LiveRunError(f"Hermes {arm} coding arm did not record scenario latency")
+        return {"answer": "verified-pass" if verify_workspace(workspace) else "verified-fail", "usage": _usage(result, manifest), "elapsed_seconds": time.monotonic() - started, "scenario_latency_seconds": float(scenario_latency)}
 
-    probes = [{"id": item.identifier, "type": item.category, "question": item.prompt} for item in items]
-    try:
-        report = run_paired_evaluation(manifest, probes, execute, lambda _probe, answer: {"score": float(answer == "verified-pass")})
-    except PairedRunError as exc:
-        raise LiveRunError(str(exc)) from exc
+    rows = []
+    total_cost = 0.0
+    paired = {item.identifier: [] for item in items}
+    for item in items:
+        for repeat in range(_REPEATS):
+            outcomes = {}
+            for arm in ("stock", "scroll"):
+                outcome = execute(arm, item, repeat)
+                total_cost += float(outcome["usage"]["cost_usd"])
+                if total_cost > manifest["cost_ceiling_usd"]:
+                    raise LiveRunError("coding evaluation exceeded frozen cost_ceiling_usd")
+                score = float(outcome["answer"] == "verified-pass")
+                outcomes[arm] = score
+                rows.append({"task_id": item.identifier, "repeat": repeat + 1, "arm": arm, "score": score, "answer_sha256": hashlib.sha256(outcome["answer"].encode()).hexdigest(), "usage": outcome["usage"], "elapsed_seconds": outcome["elapsed_seconds"], "scenario_latency_seconds": outcome["scenario_latency_seconds"]})
+            paired[item.identifier].append(outcomes["scroll"] - outcomes["stock"])
+    task_deltas = [sum(paired[item.identifier]) / _REPEATS for item in items]
+    stock_scores = [row["score"] for row in rows if row["arm"] == "stock"]
+    scroll_scores = [row["score"] for row in rows if row["arm"] == "scroll"]
+    manual_selection = [row["scenario_latency_seconds"] for row in rows if row["arm"] == "scroll" and scenarios[row["task_id"]] == "manual-compaction"]
+    cache_rebuild = [row["scenario_latency_seconds"] for row in rows if row["arm"] == "scroll" and scenarios[row["task_id"]] == "cache-loss-resume"]
+    lower_bound = paired_bootstrap_lower_bound(task_deltas, seed=int(manifest["seed"]))
+    manifest_digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    report = {
+        "manifest_sha256": manifest_digest, "total_cost_usd": total_cost, "rows": rows, "repeats_per_trajectory": _REPEATS,
+        "task_success": {"stock_mean": sum(stock_scores) / len(stock_scores), "scroll_mean": sum(scroll_scores) / len(scroll_scores), "paired_delta_by_trajectory": dict(zip((item.identifier for item in items), task_deltas)), "paired_bootstrap_resamples": _BOOTSTRAP_RESAMPLES, "paired_delta_lower_95": lower_bound, "meets_minus_five_point_gate": lower_bound >= -0.05},
+        "performance_seconds": {"scroll_manual_selection_p95": _percentile(manual_selection, 0.95), "scroll_cache_rebuild_p95": _percentile(cache_rebuild, 0.95), "meets_selection_gate": _percentile(manual_selection, 0.95) < 0.5, "meets_rebuild_gate": _percentile(cache_rebuild, 0.95) < 2.0},
+    }
     report.update({
         "schema_version": 1, "implementation_commit": manifest["implementation_commit"], "agent_prompt_sha256": manifest["agent_prompt_sha256"],
         "source_revisions": manifest["source_revisions"], "licenses": manifest["licenses"],
-        "trajectory_scenarios": {item.identifier: item.scenario for item in items},
+        "trajectory_scenarios": scenarios,
     })
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
