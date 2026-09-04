@@ -113,14 +113,26 @@ def _sandboxed_worker_command(job_root: Path, job_path: Path, workspace: Path) -
     ], environment
 
 
+def _resumable_coding_result(result_path: Path, workspace: Path, manifest: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    try:
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        usage = _usage(result, manifest)
+    except (OSError, json.JSONDecodeError, LiveRunError):
+        return None
+    scenario_latency = result.get("scenario_latency_seconds") if isinstance(result, Mapping) else None
+    if not isinstance(result, Mapping) or not isinstance(result.get("answer"), str) or not result["answer"].strip() or not isinstance(scenario_latency, (int, float)) or isinstance(scenario_latency, bool) or scenario_latency < 0:
+        return None
+    return {"answer": "verified-pass" if verify_workspace(workspace) else "verified-fail", "usage": usage, "elapsed_seconds": None, "scenario_latency_seconds": float(scenario_latency), "resumed": True}
+
+
 def run_coding_evaluation(
     manifest_path: Path, *, runtime_root: Path, output_path: Path,
-    credential_home: Path = Path.home() / ".hermes",
+    credential_home: Path = Path.home() / ".hermes", resume_runtime_root: Path | None = None,
 ) -> dict[str, Any]:
     manifest = _read_manifest(manifest_path)
     validate_live_manifest(manifest)
-    if manifest["schema_version"] != 2:
-        raise LiveRunError("coding evaluation requires schema_version 2")
+    if manifest["schema_version"] != 3:
+        raise LiveRunError("coding evaluation requires schema_version 3")
     verify_manifest_provenance(manifest, Path(__file__).resolve().parents[2])
     if manifest["agent_prompt_sha256"] != coding_prompt_sha256():
         raise LiveRunError("coding manifest does not freeze this executor's agent prompt")
@@ -132,10 +144,19 @@ def run_coding_evaluation(
     runtime_root = runtime_root.resolve()
     _secure_directory(runtime_root)
     _secure_directory(runtime_root / "jobs")
+    if resume_runtime_root is None:
+        raise LiveRunError("coding evaluation requires its frozen resume runtime")
+    resume_runtime_root = resume_runtime_root.resolve()
+    if resume_runtime_root == runtime_root or not resume_runtime_root.is_dir() or resume_runtime_root.name != manifest["resume_source"]["runtime_root_name"]:
+        raise LiveRunError("coding resume runtime does not match the frozen source")
 
     def execute(arm: str, item, repeat: int) -> Mapping[str, Any]:
         probe = {"id": item.identifier, "type": item.category, "question": item.prompt}
-        job_root = runtime_root / "jobs" / hashlib.sha256(f"{arm}:{item.identifier}:{repeat}".encode()).hexdigest()
+        job_name = hashlib.sha256(f"{arm}:{item.identifier}:{repeat}".encode()).hexdigest()
+        prior = _resumable_coding_result(resume_runtime_root / "jobs" / job_name / "result.json", resume_runtime_root / "jobs" / job_name / "workspace", manifest)
+        if prior is not None:
+            return prior
+        job_root = runtime_root / "jobs" / job_name
         workspace = job_root / "workspace"
         write_workspace(item, workspace)
         _secure_directory(job_root)
@@ -143,14 +164,14 @@ def run_coding_evaluation(
         job_path = job_root / "job.json"
         _write_private_json(job_path, {
             "lane": "coding", "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
-            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "context_total_ceiling_seconds": manifest["context_total_ceiling_seconds"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
+            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "context_total_ceiling_seconds": manifest["context_total_ceiling_seconds"], "auxiliary_compression_timeout_seconds": manifest["auxiliary_compression_timeout_seconds"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
             "history": item.history(), "probe": dict(probe), "scenario": item.scenario, "runtime_home": str(_SANDBOX_JOB_ROOT / "home"), "workspace": str(_SANDBOX_JOB_ROOT / "workspace"),
-            "api_key": _lease_chatgpt_codex_access_token(credential_home), "result_path": str(_SANDBOX_JOB_ROOT / "result.json"),
+            "api_key": _lease_chatgpt_codex_access_token(credential_home, minimum_ttl_seconds=manifest["worker_access_token_minimum_ttl_seconds"]), "result_path": str(_SANDBOX_JOB_ROOT / "result.json"),
         })
         started = time.monotonic()
         try:
             command, environment = _sandboxed_worker_command(job_root, job_path, workspace)
-            subprocess.run(command, cwd=workspace, env=environment, check=True, capture_output=True, text=True, timeout=1_200)
+            subprocess.run(command, cwd=workspace, env=environment, check=True, capture_output=True, text=True, timeout=manifest["worker_timeout_seconds"])
             result = json.loads(result_path.read_text(encoding="utf-8"))
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
             raise LiveRunError(f"Hermes {arm} coding arm failed for {item.identifier}") from exc
@@ -161,11 +182,11 @@ def run_coding_evaluation(
         scenario_latency = result.get("scenario_latency_seconds")
         if not isinstance(scenario_latency, (int, float)) or isinstance(scenario_latency, bool) or scenario_latency < 0:
             raise LiveRunError(f"Hermes {arm} coding arm did not record scenario latency")
-        return {"answer": "verified-pass" if verify_workspace(workspace) else "verified-fail", "usage": _usage(result, manifest), "elapsed_seconds": time.monotonic() - started, "scenario_latency_seconds": float(scenario_latency)}
+        return {"answer": "verified-pass" if verify_workspace(workspace) else "verified-fail", "usage": _usage(result, manifest), "elapsed_seconds": time.monotonic() - started, "scenario_latency_seconds": float(scenario_latency), "resumed": False}
 
     def run_one(index: int, item, repeat: int, arm: str) -> tuple[int, dict[str, Any]]:
         outcome = execute(arm, item, repeat)
-        return index, {"task_id": item.identifier, "repeat": repeat + 1, "arm": arm, "score": float(outcome["answer"] == "verified-pass"), "answer_sha256": hashlib.sha256(outcome["answer"].encode()).hexdigest(), "usage": outcome["usage"], "elapsed_seconds": outcome["elapsed_seconds"], "scenario_latency_seconds": outcome["scenario_latency_seconds"]}
+        return index, {"task_id": item.identifier, "repeat": repeat + 1, "arm": arm, "score": float(outcome["answer"] == "verified-pass"), "answer_sha256": hashlib.sha256(outcome["answer"].encode()).hexdigest(), "usage": outcome["usage"], "elapsed_seconds": outcome["elapsed_seconds"], "scenario_latency_seconds": outcome["scenario_latency_seconds"], "resumed": outcome["resumed"]}
 
     jobs = [(index, item, repeat, arm) for index, (item, repeat, arm) in enumerate((item, repeat, arm) for item in items for repeat in range(_REPEATS) for arm in ("stock", "scroll"))]
     rows_by_index = {}
@@ -198,7 +219,7 @@ def run_coding_evaluation(
     lower_bound = paired_bootstrap_lower_bound(task_deltas, seed=int(manifest["seed"]))
     manifest_digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     report = {
-        "manifest_sha256": manifest_digest, "billing_mode": manifest["billing_mode"], "rows": rows, "repeats_per_trajectory": _REPEATS,
+        "manifest_sha256": manifest_digest, "billing_mode": manifest["billing_mode"], "rows": rows, "resumed_rows": sum(row["resumed"] for row in rows), "resume_source": manifest["resume_source"], "repeats_per_trajectory": _REPEATS,
         "task_success": {"stock_mean": sum(stock_scores) / len(stock_scores), "scroll_mean": sum(scroll_scores) / len(scroll_scores), "paired_delta_by_trajectory": dict(zip((item.identifier for item in items), task_deltas)), "paired_bootstrap_resamples": _BOOTSTRAP_RESAMPLES, "paired_delta_lower_95": lower_bound, "meets_minus_five_point_gate": lower_bound >= -0.05},
         "performance_seconds": {"scroll_manual_selection_p95": _percentile(manual_selection, 0.95), "scroll_cache_rebuild_p95": _percentile(cache_rebuild, 0.95), "meets_selection_gate": _percentile(manual_selection, 0.95) < 0.5, "meets_rebuild_gate": _percentile(cache_rebuild, 0.95) < 2.0},
     }
@@ -217,8 +238,9 @@ def main() -> None:
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--runtime-root", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--resume-runtime-root", required=True, type=Path)
     args = parser.parse_args()
-    report = run_coding_evaluation(args.manifest, runtime_root=args.runtime_root, output_path=args.output)
+    report = run_coding_evaluation(args.manifest, runtime_root=args.runtime_root, output_path=args.output, resume_runtime_root=args.resume_runtime_root)
     print(json.dumps({"manifest_sha256": report["manifest_sha256"], "billing_mode": report["billing_mode"], "rows": len(report["rows"])}, sort_keys=True))
 
 

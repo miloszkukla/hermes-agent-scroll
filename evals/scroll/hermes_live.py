@@ -366,13 +366,15 @@ def _require_chatgpt_codex_oauth(hermes_home: Path) -> None:
         raise LiveRunError("ChatGPT Codex OAuth credential is unavailable")
 
 
-def _lease_chatgpt_codex_access_token(hermes_home: Path, resolver: Any = None) -> str:
+def _lease_chatgpt_codex_access_token(hermes_home: Path, resolver: Any = None, minimum_ttl_seconds: float = _WORKER_ACCESS_TOKEN_MINIMUM_TTL_SECONDS) -> str:
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
     from hermes_cli.auth import _decode_jwt_claims, resolve_codex_runtime_credentials
 
+    if not isinstance(minimum_ttl_seconds, (int, float)) or isinstance(minimum_ttl_seconds, bool) or not math.isfinite(float(minimum_ttl_seconds)) or minimum_ttl_seconds <= 0:
+        raise LiveRunError("parent-managed ChatGPT Codex lease needs a positive minimum lifetime")
     token = set_hermes_home_override(hermes_home)
     try:
-        credentials = (resolver or resolve_codex_runtime_credentials)(refresh_if_expiring=True, refresh_skew_seconds=_WORKER_ACCESS_TOKEN_MINIMUM_TTL_SECONDS)
+        credentials = (resolver or resolve_codex_runtime_credentials)(refresh_if_expiring=True, refresh_skew_seconds=minimum_ttl_seconds)
     finally:
         reset_hermes_home_override(token)
     api_key = credentials.get("api_key")
@@ -382,8 +384,8 @@ def _lease_chatgpt_codex_access_token(hermes_home: Path, resolver: Any = None) -
     source = credentials.get("source")
     if source == "credential_pool":
         exp = _decode_jwt_claims(api_key).get("exp")
-        if not isinstance(exp, (int, float)) or not math.isfinite(float(exp)) or float(exp) <= time.time() + _WORKER_ACCESS_TOKEN_MINIMUM_TTL_SECONDS:
-            raise LiveRunError("parent-managed ChatGPT Codex credential-pool lease needs a verifiable 21-minute lifetime")
+        if not isinstance(exp, (int, float)) or not math.isfinite(float(exp)) or float(exp) <= time.time() + minimum_ttl_seconds:
+            raise LiveRunError("parent-managed ChatGPT Codex credential-pool lease needs a verifiable minimum lifetime")
     elif source != "hermes-auth-store":
         raise LiveRunError("evaluation requires a parent-managed ChatGPT Codex OAuth store or credential pool")
     return api_key
@@ -419,6 +421,7 @@ def _worker_config(job: Mapping[str, Any]) -> str:
         f"    model: {job['model']}\n"
         "    api_mode: codex_responses\n"
         "    reasoning_effort: none\n"
+        f"    timeout: {job.get('auxiliary_compression_timeout_seconds', 300)}\n"
         f"    max_output_tokens: {job['max_output_tokens']}\n"
     )
 

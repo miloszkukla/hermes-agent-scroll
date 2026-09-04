@@ -40,10 +40,15 @@ def _manifest():
     }
 
 
+def _coding_manifest():
+    return {**_manifest(), "schema_version": 3, "context_total_ceiling_seconds": 1500, "auxiliary_compression_timeout_seconds": 400, "worker_timeout_seconds": 1650, "worker_access_token_minimum_ttl_seconds": 1800, "resume_source": {"manifest_sha256": "e" * 64, "implementation_commit": "f" * 40, "runtime_root_name": "live-coding-gated-20260904-r4", "context_total_ceiling_seconds": 900, "auxiliary_compression_timeout_seconds": 300, "worker_timeout_seconds": 1200, "worker_access_token_minimum_ttl_seconds": 1260}}
+
+
 def test_live_manifest_requires_a_frozen_symmetric_credential_free_shape():
     validate_live_manifest(_manifest())
     validate_live_manifest({**_manifest(), "temperature": None})
     validate_live_manifest({**_manifest(), "schema_version": 2, "context_total_ceiling_seconds": 900})
+    validate_live_manifest(_coding_manifest())
     with pytest.raises(LiveManifestError, match="identical"):
         validate_live_manifest({**_manifest(), "arms": {"stock": "a", "scroll": "b"}})
     with pytest.raises(LiveManifestError, match="credentials"):
@@ -88,7 +93,7 @@ def test_live_evaluators_bind_their_manifest_schema_before_provenance_or_auth(tm
     coding_path = tmp_path / "coding.json"
     coding_path.write_text(json.dumps(coding), encoding="utf-8")
 
-    with pytest.raises(LiveRunError, match="coding evaluation requires schema_version 2"):
+    with pytest.raises(LiveRunError, match="coding evaluation requires schema_version 3"):
         run_coding_evaluation(coding_path, runtime_root=tmp_path / "coding-runtime", output_path=tmp_path / "coding-report.json")
 
     memory = {**_manifest(), "schema_version": 2, "context_total_ceiling_seconds": 900}

@@ -1,8 +1,10 @@
 """The coding lane is fixed, objective, and starts from failing workspaces."""
 
+import json
+
 import pytest
 
-from evals.scroll.coding_live import _items, _percentile, paired_bootstrap_lower_bound
+from evals.scroll.coding_live import _items, _percentile, _resumable_coding_result, paired_bootstrap_lower_bound
 from evals.scroll.coding_trajectories import CANONICAL_HISTORY_MIN_TOKENS, TRAJECTORIES, canonical_history_tokens, verify_workspace, write_workspace
 from evals.scroll.hermes_live import LiveRunError
 
@@ -41,3 +43,14 @@ def test_coding_statistics_are_paired_and_deterministic():
     assert paired_bootstrap_lower_bound([0.25] * 20, seed=7) == 0.25
     assert paired_bootstrap_lower_bound([-0.1] * 20, seed=7) == -0.1
     assert _percentile([0.1, 0.2, 0.3, 0.4, 0.5], 0.95) == 0.5
+
+
+def test_coding_resume_accepts_only_complete_bounded_worker_results(tmp_path, monkeypatch):
+    result = tmp_path / "result.json"
+    result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}), encoding="utf-8")
+    manifest = {"input_token_budget": 10, "output_token_budget": 10, "cache_read_token_budget": 10}
+    monkeypatch.setattr("evals.scroll.coding_live.verify_workspace", lambda _workspace: True)
+
+    assert _resumable_coding_result(result, tmp_path / "workspace", manifest) == {"answer": "verified-pass", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "elapsed_seconds": None, "scenario_latency_seconds": 0.5, "resumed": True}
+    result.write_text(json.dumps({"answer": "", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}), encoding="utf-8")
+    assert _resumable_coding_result(result, tmp_path / "workspace", manifest) is None

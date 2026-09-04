@@ -11,7 +11,9 @@ _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _CREDENTIAL_VALUE_RE = re.compile(r"(?:^|\s)(?:basic\s+|bearer\s+|sk-|AIza|gh[pousr]_|xox[baprs]-)", re.IGNORECASE)
 _MANIFEST_KEYS = frozenset({"schema_version", "live_model", "implementation_commit", "plan_sha256", "credential_free_manifest_sha256", "agent_prompt_sha256", "provider", "authentication_mode", "billing_mode", "agent_model", "judge_model", "judge_source", "temperature", "seed", "context_window_tokens", "max_iterations", "max_output_tokens", "max_parallel_workers", "input_token_budget", "output_token_budget", "cache_read_token_budget", "source_revisions", "licenses", "datasets", "arms"})
 _V2_MANIFEST_KEYS = _MANIFEST_KEYS | {"context_total_ceiling_seconds"}
+_V3_MANIFEST_KEYS = _V2_MANIFEST_KEYS | {"auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds", "resume_source"}
 _DATASET_KEYS = frozenset({"name", "revision", "item_ids"})
+_RESUME_SOURCE_KEYS = frozenset({"manifest_sha256", "implementation_commit", "runtime_root_name", "context_total_ceiling_seconds", "auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds"})
 
 
 class LiveManifestError(ValueError):
@@ -41,11 +43,11 @@ def validate_live_manifest(manifest: dict[str, Any]) -> None:
     if _contains_credential(manifest):
         raise LiveManifestError("manifest must not contain credentials")
     schema_version = manifest.get("schema_version")
-    expected_keys = _MANIFEST_KEYS if schema_version == 1 else _V2_MANIFEST_KEYS if schema_version == 2 else None
+    expected_keys = _MANIFEST_KEYS if schema_version == 1 else _V2_MANIFEST_KEYS if schema_version == 2 else _V3_MANIFEST_KEYS if schema_version == 3 else None
     if expected_keys is None or set(manifest) != expected_keys:
         raise LiveManifestError("manifest must contain only the frozen schema fields")
     if isinstance(schema_version, bool):
-        raise LiveManifestError("schema_version must be 1 or 2")
+        raise LiveManifestError("schema_version must be 1, 2, or 3")
     if manifest.get("live_model") is not True:
         raise LiveManifestError("live_model must be explicitly true")
     if not _COMMIT_RE.fullmatch(str(manifest.get("implementation_commit", ""))):
@@ -60,8 +62,10 @@ def validate_live_manifest(manifest: dict[str, Any]) -> None:
     if not manifest["agent_model"].startswith("gpt-") or (manifest["judge_model"] != "none-objective-verifier" and not manifest["judge_model"].startswith("gpt-")):
         raise LiveManifestError("live evaluation must use OpenAI Codex models")
     numeric_keys = ("seed", "context_window_tokens", "max_iterations", "max_output_tokens", "max_parallel_workers", "input_token_budget", "output_token_budget", "cache_read_token_budget")
-    if schema_version == 2:
+    if schema_version >= 2:
         numeric_keys += ("context_total_ceiling_seconds",)
+    if schema_version == 3:
+        numeric_keys += ("auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds")
     for key in numeric_keys:
         _require(manifest.get(key), key, (int, float))
     if not isinstance(manifest["max_parallel_workers"], int) or isinstance(manifest["max_parallel_workers"], bool):
@@ -69,8 +73,16 @@ def validate_live_manifest(manifest: dict[str, Any]) -> None:
     temperature = manifest.get("temperature")
     if temperature is not None and (not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or temperature < 0):
         raise LiveManifestError("temperature must be non-negative or null when the model does not support it")
-    if manifest["context_window_tokens"] <= 0 or manifest["max_iterations"] <= 0 or manifest["max_output_tokens"] <= 0 or manifest["max_parallel_workers"] <= 0 or manifest["max_parallel_workers"] > 4 or manifest["input_token_budget"] <= 0 or manifest["output_token_budget"] <= 0 or manifest["cache_read_token_budget"] <= 0 or (schema_version == 2 and manifest["context_total_ceiling_seconds"] <= 0):
+    if manifest["context_window_tokens"] <= 0 or manifest["max_iterations"] <= 0 or manifest["max_output_tokens"] <= 0 or manifest["max_parallel_workers"] <= 0 or manifest["max_parallel_workers"] > 4 or manifest["input_token_budget"] <= 0 or manifest["output_token_budget"] <= 0 or manifest["cache_read_token_budget"] <= 0 or (schema_version >= 2 and manifest["context_total_ceiling_seconds"] <= 0) or (schema_version == 3 and (manifest["auxiliary_compression_timeout_seconds"] <= 0 or manifest["worker_timeout_seconds"] <= manifest["context_total_ceiling_seconds"] or manifest["worker_access_token_minimum_ttl_seconds"] <= manifest["worker_timeout_seconds"])):
         raise LiveManifestError("token budgets must be positive and max_parallel_workers must be between 1 and 4")
+    if schema_version == 3:
+        resume_source = _require(manifest.get("resume_source"), "resume_source", dict)
+        if set(resume_source) != _RESUME_SOURCE_KEYS or not _SHA256_RE.fullmatch(str(resume_source.get("manifest_sha256", ""))) or not _COMMIT_RE.fullmatch(str(resume_source.get("implementation_commit", ""))) or not isinstance(resume_source.get("runtime_root_name"), str) or not resume_source["runtime_root_name"]:
+            raise LiveManifestError("resume_source must pin the compatible prior coding runtime")
+        for key in ("context_total_ceiling_seconds", "auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds"):
+            _require(resume_source.get(key), f"resume_source.{key}", (int, float))
+        if any(resume_source[key] <= 0 for key in ("context_total_ceiling_seconds", "auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds")):
+            raise LiveManifestError("resume_source timeout values must be positive")
     for key in ("source_revisions", "licenses"):
         value = _require(manifest.get(key), key, dict)
         if not all(isinstance(name, str) and name and isinstance(revision, str) and revision for name, revision in value.items()):
