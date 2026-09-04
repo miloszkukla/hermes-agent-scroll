@@ -2,14 +2,12 @@
 
 ## Current status
 
-**PAUSED pending fresh review of the ChatGPT Codex OAuth candidate — the Flex
-GO below is historical.** The task owner replaced OpenRouter with ChatGPT Codex
-OAuth and authorized up to four isolated workers. A partial coding run was
-excluded after an absolute `cd` escaped its task workspace; the replacement
-uses a Bubblewrap read-only checkout boundary. The new candidate and manifests
-are recorded in
-[CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md)
-and require a new independent review before its fresh frozen-manifest run.
+**GO for the refreshed ChatGPT Codex OAuth coding candidate.** The task owner
+replaced OpenRouter with ChatGPT Codex OAuth and authorized up to four isolated
+workers. A partial coding run was excluded after an absolute `cd` escaped its
+task workspace; the replacement uses a Bubblewrap read-only checkout boundary.
+The candidate, frozen coding manifest, and independent focused GO are recorded
+in [CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).
 
 ## Historical Flex decision
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-**Focused review pending before a fresh coding lane.** The controlled memory
+**GO for a fresh coding lane.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -13,7 +13,7 @@ the reviewer's resume-provenance finding be fixed for future runs. Candidate
 `cbc0d324af9966aef1b612d64dd01eac7c56d5ee` binds new saved results to the
 frozen manifest/candidate, arm, task, model, history, and probe before reuse.
 Legacy bare checkpoints rerun under that future policy. Its refreshed coding
-manifest requires focused review before a fresh coding lane begins. The prior
+manifest cleared focused review before a fresh coding lane begins. The prior
 review approved implementation commit `9a53ca9a21ba65f6b5c86089ccedf04a994f7315` and evidence pin
 `27666ea2ea3c2298e11a98e9e42cb81cb7118bb6`. The pool lease fails closed
 unless its JWT has a finite numeric expiry strictly beyond 21 minutes; direct
@@ -121,3 +121,16 @@ The prior independent review cleared implementation commit
 `5e03379f916ad563f359d8782b6577c773ac709d`, but it predates the Bubblewrap
 containment and resume-provenance changes and is not the approval for the
 refreshed coding candidate.
+
+## Focused coding gate
+
+Independent reviewer: `/root/final_fresh_review`.
+
+On 2026-09-04, the reviewer checked implementation commit
+`cbc0d324af9966aef1b612d64dd01eac7c56d5ee` and evidence/manifest commit
+`23995f404ab6dbe93dddba423cb9cb25b5d5c82f`. The reviewer verified
+provenance-bound future resume, coding-worker compatibility, coding-manifest
+provenance, OAuth/Bubblewrap containment, and the four-worker cap. The focused
+suite passed 237 tests; Ruff and `git diff --check` passed. Disposition:
+**GO — no actionable P0/P1/P2.** This authorizes a new coding runtime only;
+the completed 8c memory report remains evidence and does not meet acceptance.
