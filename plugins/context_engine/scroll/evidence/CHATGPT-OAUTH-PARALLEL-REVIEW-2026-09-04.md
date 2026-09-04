@@ -18,12 +18,12 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `4735fadb8b94d2190986fe1366b51c07c2d3bd09` |
+| Implementation commit | `e86ac536405c30421e784e70d48c8b3fbecee00f` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
-| Memory manifest SHA-256 | `31104d67331eb3cf0408d66db5f3a83b0f28cbc5c32ee4bf69de473014923190` |
-| Coding manifest SHA-256 | `0cda70e322ad2b236825a11075e80bf08023f64f209efa9e87856a38639a96da` |
+| Memory manifest SHA-256 | `f7fd216a958b3f47cb95cebefa589ab4f73a8abd37bfc55c04621513edc159f4` |
+| Coding manifest SHA-256 | `a26a630ceac40d89417f50afe843c02f5835ba4e9d772b17cd0d4e361dd080e5` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -66,7 +66,7 @@ estimator was invalid.
 ## Verification and independent disposition
 
 - `pytest -q tests/evals/test_scroll_hermes_live.py tests/evals/test_scroll_paired_runner.py tests/evals/test_scroll_live_manifest.py tests/plugins/test_scroll_documentation.py`
-  — 26 passed.
+  — 40 passed.
 - `ruff check evals/scroll tests/evals/test_scroll_paired_runner.py
   tests/evals/test_scroll_live_manifest.py tests/evals/test_scroll_hermes_live.py`
   — passed.
