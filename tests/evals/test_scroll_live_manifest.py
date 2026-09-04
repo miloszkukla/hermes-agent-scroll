@@ -79,6 +79,8 @@ def test_live_manifest_requires_a_frozen_symmetric_credential_free_shape():
         validate_live_manifest({**_manifest(), "cache_read_token_budget": 0})
     with pytest.raises(LiveManifestError, match="budgets"):
         validate_live_manifest({**_manifest(), "schema_version": 2, "context_total_ceiling_seconds": 0})
+    with pytest.raises(LiveManifestError, match="budgets"):
+        validate_live_manifest({**_coding_manifest(), "worker_timeout_seconds": 1500})
 
 
 def test_live_manifest_template_is_not_live_evaluation_authorization():
