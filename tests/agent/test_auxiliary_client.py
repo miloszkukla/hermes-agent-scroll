@@ -3271,6 +3271,40 @@ class TestVisionAutoSkipsKimiCoding:
 
 
 class TestCodexAuxiliaryAdapterTimeout:
+    def test_no_timeout_watchdog_bounds_blocked_event_stream(self, monkeypatch):
+        iteration_started = threading.Event()
+        release_iteration = threading.Event()
+        stream_closed = threading.Event()
+
+        class _Stream:
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                iteration_started.set()
+                release_iteration.wait()
+                raise StopIteration
+
+            def close(self):
+                stream_closed.set()
+
+        class FakeResponses:
+            def create(self, **kwargs):
+                return _Stream()
+
+        monkeypatch.setattr("agent.auxiliary_client._AUX_STREAM_NO_PROGRESS_TIMEOUT_SECONDS", 0.05)
+        fake_client = SimpleNamespace(responses=FakeResponses(), close=lambda: None)
+        adapter = _CodexCompletionsAdapter(fake_client, "gpt-5.5")
+
+        started = time.monotonic()
+        with pytest.raises(TimeoutError):
+            adapter.create(messages=[{"role": "user", "content": "summarize this"}])
+
+        assert iteration_started.is_set()
+        assert time.monotonic() - started < 0.14
+        assert stream_closed.wait(1)
+        release_iteration.set()
+
     def test_no_timeout_watchdog_bounds_blocked_responses_create(self, monkeypatch):
         create_started = threading.Event()
         release_create = threading.Event()

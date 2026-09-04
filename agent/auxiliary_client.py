@@ -2081,11 +2081,38 @@ class _CodexCompletionsAdapter:
                 if hasattr(event_stream, "output"):
                     final = event_stream
                 else:
-                    final = _consume_codex_event_stream(
-                        event_stream,
-                        model=str(resp_kwargs.get("model") or model),
-                        on_event=_on_each_event,
-                    )
+                    # Stream creation can succeed while the first iterator
+                    # read blocks forever. Closing the client from the
+                    # watchdog cannot reliably wake that SDK read, so consume
+                    # on a daemon and keep the owner polling the same deadline.
+                    stream_consumption_done = threading.Event()
+                    stream_consumption: Dict[str, Any] = {}
+                    stream_consumption_context = contextvars.copy_context()
+
+                    def _consume_event_stream() -> None:
+                        try:
+                            stream_consumption["final"] = _consume_codex_event_stream(
+                                event_stream,
+                                model=str(resp_kwargs.get("model") or model),
+                                on_event=_on_each_event,
+                            )
+                        except BaseException as exc:
+                            stream_consumption["exception"] = exc
+                        finally:
+                            stream_consumption_done.set()
+
+                    threading.Thread(
+                        target=stream_consumption_context.run,
+                        args=(_consume_event_stream,),
+                        name="hermes-codex-aux-stream-consume",
+                        daemon=True,
+                    ).start()
+                    while not stream_consumption_done.wait(0.02):
+                        _check_cancelled()
+                    _check_cancelled()
+                    if "exception" in stream_consumption:
+                        raise stream_consumption["exception"]
+                    final = stream_consumption.get("final")
             finally:
                 close_fn = getattr(event_stream, "close", None)
                 if callable(close_fn):
