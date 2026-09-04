@@ -129,7 +129,7 @@ during review. No actionable P0/P1/P2 remains for the frozen manifests.
 
 ## ChatGPT OAuth and bounded-parallelism amendment
 
-Candidate: `1f2c212e04d70d5949ce4ebd38c30a725bf6ba37`.
+Candidate: `5e03379f916ad563f359d8782b6577c773ac709d`.
 
 The task owner superseded the OpenRouter Flex route with ChatGPT Codex OAuth
 and authorized up to four isolated workers. The amendment removes the

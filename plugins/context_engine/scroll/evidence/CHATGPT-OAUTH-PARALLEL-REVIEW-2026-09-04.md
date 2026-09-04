@@ -15,12 +15,12 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `1f2c212e04d70d5949ce4ebd38c30a725bf6ba37` |
+| Implementation commit | `5e03379f916ad563f359d8782b6577c773ac709d` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
-| Memory manifest SHA-256 | `ea566d98daa86959e1479f221ac3ab0d8e0f31e68b2c4085cb0d2b758f62d447` |
-| Coding manifest SHA-256 | `b1dda2cde337e19702e00f5c8fba466db9e52bfbbdca23ac60eb3a5c1346f4a2` |
+| Memory manifest SHA-256 | `86a31fcdb1f234cfbbf98da07c959a7f2fff1cbb89631098eecb3193f9407bdf` |
+| Coding manifest SHA-256 | `11c5f0c4c662d20067a6eb00c70299278a9b75ec0da70ea70f1f88401414ff94` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -36,6 +36,9 @@ statistics. It is not sent to the Codex Responses transport.
 - Auxiliary compression is explicitly configured for the same Codex route and
   model. Session accounting rejects an auxiliary call using another provider or
   model.
+- Coding workers expose only terminal, process, and local file-editing tools;
+  they cannot call vision, browser vision, or delegation. Their isolated config
+  disables smart approval, avoiding its auxiliary-model route.
 - The pinned-source memory judge receives the caller's `HERMES_HOME` and the
   Hermes source path explicitly. It resolves its client through the same Codex
   OAuth route rather than an OpenRouter or direct API-key client.
