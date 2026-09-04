@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "live_model": true,
-  "implementation_commit": "2556eb457db6a682dc1e8ceb25f06bf409532e78",
+  "implementation_commit": "9450c70cece4f3c28c2c1a892e2d27bacf9386cd",
   "plan_sha256": "7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210",
   "credential_free_manifest_sha256": "b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e",
   "agent_prompt_sha256": "fadfc8194fef35bff3fdaafcd983830bf33dab9177c831349e797159893c56d5",
@@ -14,6 +14,7 @@
   "temperature": null,
   "seed": 20260904,
   "context_window_tokens": 80000,
+  "context_total_ceiling_seconds": 900,
   "max_iterations": 8,
   "max_output_tokens": 4096,
   "max_parallel_workers": 4,
@@ -41,7 +42,7 @@
     }
   ],
   "arms": {
-    "stock": "43cb1a02462a9306e03690a9ccdfc8821ad281644548227637b331e43108e680",
-    "scroll": "43cb1a02462a9306e03690a9ccdfc8821ad281644548227637b331e43108e680"
+    "stock": "5169b8d202645702abe55c3d7985a462299479e237720f2b0321342e8d1625de",
+    "scroll": "5169b8d202645702abe55c3d7985a462299479e237720f2b0321342e8d1625de"
   }
 }

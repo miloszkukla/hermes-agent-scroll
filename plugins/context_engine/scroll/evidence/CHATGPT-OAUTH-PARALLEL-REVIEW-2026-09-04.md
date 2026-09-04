@@ -2,7 +2,7 @@
 
 ## Status
 
-**GO for a fresh replacement coding lane.** The controlled memory
+**PAUSED pending focused review for a fresh replacement coding lane.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -39,8 +39,12 @@ found that the consumption daemon lost normal liveness hooks. Candidate
 `4de8745a081620b09cc854fa932a817465511a01` transfers both hooks into that
 daemon. Its review found that protected cancellation then closed an orphaned
 stream too early. Candidate `2556eb457db6a682dc1e8ceb25f06bf409532e78`
-retains timer-scoped orphan cleanup. The previous GO is invalidated until this
-candidate and its revised manifest clear focused review.
+retains timer-scoped orphan cleanup. Its reviewed r3 coding runtime wrote 18
+raw worker results but no report: two stock compressions emitted substantive
+progress yet reached the host's 600-second total ceiling. Candidate
+`9450c70cece4f3c28c2c1a892e2d27bacf9386cd` freezes a 900-second coding-only
+host ceiling for both arms. The previous GO is invalidated until this candidate
+and its revised manifest clear focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -53,16 +57,22 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `2556eb457db6a682dc1e8ceb25f06bf409532e78` |
+| Coding implementation commit | `9450c70cece4f3c28c2c1a892e2d27bacf9386cd` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding manifest SHA-256 | `67228f5a0c6aacc6eb65c909880f1b3803e0121976a02f2b2b6c8999775fe82e` |
+| Coding manifest SHA-256 | `7e90661a4e151929e63ede3dc038f9eff4f1b93468dfaed4b2868b01bf1e46c7` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
+
+The coding manifest is schema v2 and freezes
+`context_total_ceiling_seconds: 900`. This preserves the same model, task set,
+input budgets, compression behavior, and four-worker cap for stock and Scroll;
+it only gives a substantively streaming long summary 50% more wall-clock time.
+The adapter retains its independent 1,200-second hard backstop.
 
 ## Route and isolation contract
 
@@ -142,6 +152,14 @@ inside the consumer. Its review found that protected cancellation then closed an
 orphaned stream too early; candidate
 `2556eb457db6a682dc1e8ceb25f06bf409532e78` leaves it to attempt-timer cleanup.
 Neither the 46-result nor 27-result runtime will be reused.
+
+The `live-coding-gated-20260904-r3` runtime is also excluded. It wrote 18 raw
+worker results but no durable report. The adapter received substantive stream
+events, so this was not the blocked `responses.create()` or first-iterator-read
+failure addressed by the prior candidates. It was a healthy-but-slow long
+summary that reached the shared 600-second host ceiling. No r3 raw result will
+be reused; the schema-v2 manifest makes the 900-second ceiling explicit and
+requires a new focused gate before another attempt.
 
 ## Completed memory lane
 

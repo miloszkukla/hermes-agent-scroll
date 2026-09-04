@@ -2,12 +2,15 @@
 
 ## Current status
 
-**GO for the refreshed ChatGPT Codex OAuth coding candidate.** The task owner
-replaced OpenRouter with ChatGPT Codex OAuth and authorized up to four isolated
-workers. The prior fresh coding runtime exposed a post-creation Responses stream
-that blocked on its first iterator read; the reviewed replacement bounds that
-read, retains normal liveness hooks, and preserves timer-owned cancellation
-cleanup. The candidate, frozen coding manifest, and focused GO are in
+**PAUSED pending focused review for the refreshed ChatGPT Codex OAuth coding
+candidate.** The task owner replaced OpenRouter with ChatGPT Codex OAuth and
+authorized up to four isolated workers. The prior reviewed replacement bounds a
+post-creation Responses stream that blocked on its first iterator read, retains
+normal liveness hooks, and preserves timer-owned cancellation cleanup. Its r3
+live run instead showed substantive stream progress but exceeded the shared
+600-second host ceiling. Candidate `9450c70cece4f3c28c2c1a892e2d27bacf9386cd`
+freezes a coding-only 900-second host ceiling for both arms; the prior GO is
+invalidated until this manifest revision clears focused review. Details are in
 [CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md](CHATGPT-OAUTH-PARALLEL-REVIEW-2026-09-04.md).
 
 ## Historical Flex decision
