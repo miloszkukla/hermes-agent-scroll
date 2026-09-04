@@ -2,23 +2,22 @@
 
 ## Status
 
-**Immutable pre-evaluation checkpoint.** The candidate and two credential-free
-live manifests below were independently reviewed and cleared for the recorded
-two live lanes. No API credential, raw history, answer, trace, corpus, cache,
-or virtual environment is included.
+**GO for the frozen Flex-tier candidate.** The candidate and
+two credential-free live manifests below contain no API credential, raw history,
+answer, trace, corpus, cache, or virtual environment.
 
 ## Snapshot identity
 
 Captured on 2026-09-04 against Hermes base
 `29112bef099274229cadff79cdff7bf7b99c4b77` (`v2026.8.31`) on branch
 `codex/scroll-plugin`, candidate
-`6fc652d37c78d0c598cb11b11de12bfe2359ea3b`.
+`10869fc0bb736bff89ce365d0d79f13831fd4d21`.
 
 | Material | SHA-256 |
 | --- | --- |
-| Complete candidate diff from base (`git diff --binary base..candidate`) | `58161d14b166fa8abff1952d5d3d26f682d44f9474f4cec2daf8d63a46c65607` |
-| Memory live manifest | `ebc2ec7fc6cb3c139a5196e3aa83e72132e926bb553b2fed61cfcf0620c8f113` |
-| Coding live manifest | `bde905f095791bfcd412641f1e4d495acd860a958b8a4e948cea8adb6c38de2b` |
+| Complete candidate diff from base (`git diff --binary base..candidate`) | `ea981844a803022fd481f6cbe6a1195056a3850bf54ba4b29e978bc87ad3b556` |
+| Memory live manifest | `6b4c692d94ed5a0dfda5410c00b99fbbd39e3de7000332b9de89e27343b03ce4` |
+| Coding live manifest | `48d88ebaa11cf64ea1996f562bf2fc03b197f5af54c4836dcebdc19bbe6d14a6` |
 | Plan | `7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210` |
 | Credential-free manifest | `b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e` |
 | Stage 0 report | `295aacf7cbadcd197d5b82bd70b6a4d5edb27049099735302acb9541413dc7d3` |
@@ -44,12 +43,12 @@ without changing the code under test.
 
 ## Required review outcome
 
-The independent reviewer `/root/final_fresh_review` inspected the complete
-candidate and both manifests. It found no actionable P0/P1/P2 after verifying
-the host `_compress_context` lifecycle, valid OpenAI tool-call replay shape,
+The independent reviewer `/root/final_fresh_review` cleared earlier candidates
+for the host `_compress_context` lifecycle, valid OpenAI tool-call replay shape,
 100K-token histories, paired bootstrap/p95 accounting, dirty/untracked source
 rejection, LongMemEval corpus hashing, and source-CWD `scroll_eval` imports.
-The disposition is recorded in [FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md](FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md), whose amendments record the explicit Chat Completions, terminal-isolation, and auxiliary-output-cap fixes in this candidate.
+That disposition is recorded in [FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md](FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md), but it predates this Flex amendment. Its first two Flex reviews found omitted cache-read billing and then non-fail-closed auxiliary/worker accounting; the third found malformed judge usage defaulting to zero. The reviewed replacements culminate in `10869fc0bb736bff89ce365d0d79f13831fd4d21`. The independent reviewer completed the complete candidate-and-manifest review with a 35-test fresh focused suite and **GO**; no actionable P0/P1/P2 remains.
 
 The task owner authorized the two OpenRouter-backed live lanes and delivery
-commits/pushes. The checkpoint precedes all live-model requests.
+commits/pushes. This renewed GO checkpoint precedes the authorized live-model
+requests.

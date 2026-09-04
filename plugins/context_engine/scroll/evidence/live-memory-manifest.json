@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "live_model": true,
-  "implementation_commit": "6fc652d37c78d0c598cb11b11de12bfe2359ea3b",
+  "implementation_commit": "10869fc0bb736bff89ce365d0d79f13831fd4d21",
   "plan_sha256": "7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210",
   "credential_free_manifest_sha256": "b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e",
   "agent_prompt_sha256": "52c1c91f5f26046060c65ec0bb514ce6050243e18f4cd591f15f8b62bedab61a",
@@ -10,6 +10,7 @@
   "agent_model": "openai/gpt-5.6-luna",
   "judge_model": "openai/gpt-5.6-luna",
   "judge_source": "pinned Scroll LongMemEval and BEAM metric modules",
+  "service_tier": "flex",
   "temperature": null,
   "seed": 20260904,
   "context_window_tokens": 80000,
@@ -17,8 +18,10 @@
   "max_output_tokens": 4096,
   "input_token_budget": 1000000,
   "output_token_budget": 32768,
-  "input_price_per_token": 0.0000004,
-  "output_price_per_token": 0.0000018,
+  "cache_read_token_budget": 1000000,
+  "input_price_per_token": 0.0000001,
+  "output_price_per_token": 0.0000006,
+  "cache_read_price_per_token": 0.00000001,
   "cost_ceiling_usd": 15.0,
   "source_revisions": {
     "hermes_base": "29112bef099274229cadff79cdff7bf7b99c4b77",
@@ -57,7 +60,7 @@
     }
   ],
   "arms": {
-    "stock": "7348ae2c993187ab6b7e8252ae8f137305e62da0f6f87fa6a3b6252e81bc7940",
-    "scroll": "7348ae2c993187ab6b7e8252ae8f137305e62da0f6f87fa6a3b6252e81bc7940"
+    "stock": "8d24e47212ef1cc8b15196f59124db0bf5f801dff8f2472cd6f7f12daf18975d",
+    "scroll": "8d24e47212ef1cc8b15196f59124db0bf5f801dff8f2472cd6f7f12daf18975d"
   }
 }

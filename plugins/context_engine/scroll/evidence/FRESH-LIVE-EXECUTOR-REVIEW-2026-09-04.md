@@ -77,3 +77,52 @@ paired result exists yet.
 Independent reviewer `/root/final_fresh_review` rechecked this amendment:
 **GO preserved; no actionable P0/P1/P2.** Its focused suite passed 19 tests,
 and the expanded main focused matrix passed 84 tests across 14 files.
+
+## Flex cost-accounting review
+
+Candidate: `318686943fe10f34f00db6d978cf7dab5748b658`.
+
+Independent reviewer `/root/final_fresh_review` returned **NO-GO**: agent,
+auxiliary-compression, and judge cost accounting omitted billable cache-read
+tokens, so the frozen dollar ceilings were unreliable. The replacement
+candidate `c913874fd2162f4cbf37d648115d1708159ab063` freezes Flex cache-read
+pricing and a cache-read budget, then aggregates the normalized buckets across
+all three paths. It awaits a fresh review; no further live request is
+authorized by this record.
+
+## Strict cost-integrity review
+
+Candidate: `c913874fd2162f4cbf37d648115d1708159ab063`.
+
+Independent reviewer `/root/final_fresh_review` returned **NO-GO** again:
+auxiliary SessionDB accounting failures were still swallowed, omitted usage
+buckets defaulted to zero, and paired/coding runners trusted raw worker costs.
+The replacement candidate `017e4dbcf8f36b16af5b00a1cb681cf81261a858`
+propagates an evaluator-only accounting failure sink through nested agent
+contexts, rejects omitted usage, and derives each accepted cost from the frozen
+rates. It awaits a fresh review; no further live request is authorized by this
+record.
+
+## Judge-usage boundary review
+
+Candidate: `017e4dbcf8f36b16af5b00a1cb681cf81261a858`.
+
+Independent reviewer `/root/final_fresh_review` returned **NO-GO**: the outer
+memory-judge boundary still defaulted omitted subprocess usage buckets to zero,
+so a malformed result could evade the shared cap. The replacement candidate
+`10869fc0bb736bff89ce365d0d79f13831fd4d21` requires all three integer usage
+buckets and rejects reports with no prompt tokens (including cache reads) or no
+completion tokens. Its targeted rejection cases pass locally. A fresh complete
+candidate-and-manifest review remains required; no further live request is
+authorized by this record.
+
+## Final Flex-tier review
+
+Candidate: `10869fc0bb736bff89ce365d0d79f13831fd4d21`.
+
+Independent reviewer `/root/final_fresh_review` returned **GO**. It rechecked
+strict complete judge usage (including malformed and zero reports), nested
+evaluator-only auxiliary failure-sink propagation, reconstructed costs and
+cache budgets, Flex Chat Completions plumbing, provenance, and symmetric arms.
+The fresh focused reviewer suite passed 35 tests. No live request occurred
+during review. No actionable P0/P1/P2 remains for the frozen manifests.

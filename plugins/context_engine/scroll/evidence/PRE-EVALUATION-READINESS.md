@@ -2,9 +2,9 @@
 
 ## Decision
 
-**GO for the two frozen live lanes only.** The exact implementation candidate,
-credential-free manifests, source and corpus pins, and independent fresh review
-below are complete. The task owner authorized the OpenRouter credential in
+**GO for the frozen Flex-tier candidate.** The exact implementation candidate,
+credential-free manifests, source and corpus pins, and prior independent review
+are recorded below. The task owner authorized the OpenRouter credential in
 `/home/codex/.hermes/.env` on 2026-09-04. The first stock worker reached its
 auxiliary compression call but failed before the agent turn because Hermes chose
 the incompatible Codex Responses transport for the frozen seed. A subsequent
@@ -12,7 +12,11 @@ Chat Completions retry completed one coding worker, but its output exceeded the
 then-undersized aggregate cap and its terminal task CWD was not isolated. Both
 incomplete traces are excluded; the reviewed replacement candidate below forces
 Chat Completions, registers the task workspace, and has no accepted paired
-result yet.
+result yet. The task owner subsequently selected OpenRouter Flex; the
+default-tier coding run was stopped after one result and is also excluded. The
+replacement candidate requests Flex for agent, auxiliary-compression, and judge
+calls; the fresh independent review cleared `10869fc0bb736bff89ce365d0d79f13831fd4d21`
+before restarting.
 
 ## Frozen inputs at this checkpoint
 
@@ -24,9 +28,10 @@ result yet.
 | Credential-free manifest SHA-256 | `b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e` |
 | Stage 0 report SHA-256 | `295aacf7cbadcd197d5b82bd70b6a4d5edb27049099735302acb9541413dc7d3` |
 | Evaluation advisory SHA-256 | `f4fe4183547b18a411e54d2e6c5c9d3b5e7f6ae87f96cd747a499953de0e7939` |
-| Implementation commit | `6fc652d37c78d0c598cb11b11de12bfe2359ea3b` |
-| Memory live-manifest SHA-256 | `ebc2ec7fc6cb3c139a5196e3aa83e72132e926bb553b2fed61cfcf0620c8f113` |
-| Coding live-manifest SHA-256 | `bde905f095791bfcd412641f1e4d495acd860a958b8a4e948cea8adb6c38de2b` |
+| Implementation commit | `10869fc0bb736bff89ce365d0d79f13831fd4d21` |
+| Memory live-manifest SHA-256 | `6b4c692d94ed5a0dfda5410c00b99fbbd39e3de7000332b9de89e27343b03ce4` |
+| Coding live-manifest SHA-256 | `48d88ebaa11cf64ea1996f562bf2fc03b197f5af54c4836dcebdc19bbe6d14a6` |
+| OpenRouter tier / accounting rate | `flex` / `$0.10` input, `$0.60` output, and `$0.01` cache-read per million tokens |
 | Memory/coding cost ceilings | `$15.00` / `$25.00` |
 
 ## Passing credential-free evidence
@@ -93,6 +98,16 @@ result yet.
   `6fc652d37c78d0c598cb11b11de12bfe2359ea3b`: each coding task now registers
   its workspace with the task ID, and the aggregate output cap is 65,536 tokens
   while each auxiliary call retains its 4,096-token cap.
+- The Flex-tier amendment is intentionally not covered by the preceding review;
+  its first review returned a P1 because cache-read usage was omitted from the
+  cost ceiling, and its second review found that auxiliary accounting failures
+  were swallowed and raw worker totals were trusted. The next review found
+  malformed judge usage defaulted to zero. The replacement candidate separately
+  accounts main-agent, auxiliary-compression, and judge cache reads under a
+  frozen 1,000,000-token budget, captures auxiliary accounting errors, requires
+  complete positive judge usage, and recomputes costs from frozen rates before
+  enforcing the ceiling. The fresh complete candidate-and-manifest review
+  cleared `10869fc0bb736bff89ce365d0d79f13831fd4d21` with no actionable P0/P1/P2.
 
 ## Completed gate items and execution limits
 
@@ -128,13 +143,14 @@ result yet.
    were repaired. That review predates the live executors and is superseded for
    gate purposes; the subsequent fresh complete-diff live-executor review is
    recorded above and cleared the candidate.
-4. The task owner authorized OpenRouter access and selected the base branch as
-   the visual reference. The reviewed `GO` manifests pin
-   `openai/gpt-5.6-luna`, seed, budgets, pricing, and all source/dataset inputs.
+4. The task owner authorized OpenRouter access, selected Flex, and selected the
+   base branch as the visual reference. The pending manifests pin
+   `openai/gpt-5.6-luna`, Flex, seed, budgets, pricing, and all source/dataset
+   inputs.
 
-This GO authorizes only the recorded commands and frozen manifests. Any material
-source, dependency, prompt, dataset, model, task set, or manifest change
-invalidates it and requires another candidate review.
+This GO authorizes only the recorded commands and frozen manifests.
+Any material source, dependency, prompt, dataset, model, task set, or manifest
+change invalidates it and requires another candidate review.
 
 ## Visual artifact disposition
 
