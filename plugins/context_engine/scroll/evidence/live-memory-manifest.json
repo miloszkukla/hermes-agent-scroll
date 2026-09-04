@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "live_model": true,
+  "implementation_commit": "f86f3bb2f3f3a6de517b82382eb17e30277eb763",
+  "plan_sha256": "7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210",
+  "credential_free_manifest_sha256": "b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e",
+  "agent_prompt_sha256": "52c1c91f5f26046060c65ec0bb514ce6050243e18f4cd591f15f8b62bedab61a",
+  "provider": "openrouter",
+  "authentication_mode": "user-authorized OPENROUTER_API_KEY from Hermes home",
+  "agent_model": "openai/gpt-5.6-luna",
+  "judge_model": "openai/gpt-5.6-luna",
+  "judge_source": "pinned Scroll LongMemEval and BEAM metric modules",
+  "temperature": null,
+  "seed": 20260904,
+  "context_window_tokens": 80000,
+  "max_iterations": 8,
+  "max_output_tokens": 4096,
+  "input_token_budget": 1000000,
+  "output_token_budget": 32768,
+  "input_price_per_token": 0.0000004,
+  "output_price_per_token": 0.0000018,
+  "cost_ceiling_usd": 15.0,
+  "source_revisions": {
+    "hermes_base": "29112bef099274229cadff79cdff7bf7b99c4b77",
+    "scroll": "313077708ea105cc79bf0a997338e14dae916f8c",
+    "longmemeval": "9e0b455f4ef0e2ab8f2e582289761153549043fc",
+    "beam": "3e12035532eb85768f1a7cd779832b650c4b2ef9"
+  },
+  "licenses": {
+    "hermes": "MIT",
+    "scroll": "Apache-2.0",
+    "longmemeval": "MIT",
+    "beam": "MIT"
+  },
+  "datasets": [
+    {
+      "name": "longmemeval",
+      "revision": "hf:3449de782e9476a92bc665983e9c4bfa4c46a162; sha256:08d8dad4be43ee2049a22ff5674eb86725d0ce5ff434cde2627e5e8e7e117894",
+      "item_ids": [
+        "longmemeval/01493427", "longmemeval/031748ae", "longmemeval/031748ae_abs", "longmemeval/06db6396", "longmemeval/07741c44", "longmemeval/07741c45",
+        "longmemeval/00ca467f", "longmemeval/0100672e", "longmemeval/078150f1", "longmemeval/099778bb", "longmemeval/09ba9854", "longmemeval/09ba9854_abs",
+        "longmemeval/0e5e2d1a", "longmemeval/1568498a", "longmemeval/16c90bf4", "longmemeval/18dcd5a5", "longmemeval/1903aded",
+        "longmemeval/06878be2", "longmemeval/06f04340", "longmemeval/07b6f563", "longmemeval/09d032c9", "longmemeval/0a34ad58",
+        "longmemeval/001be529", "longmemeval/0862e8bf", "longmemeval/0862e8bf_abs", "longmemeval/118b2229", "longmemeval/15745da0",
+        "longmemeval/08f4fc43", "longmemeval/0bb5a684", "longmemeval/0bc8ad92", "longmemeval/0bc8ad93", "longmemeval/0db4c65d"
+      ]
+    },
+    {
+      "name": "beam",
+      "revision": "git:3e12035532eb85768f1a7cd779832b650c4b2ef9; BEAM_100K",
+      "item_ids": [
+        "beam/100K/1/abstention-0", "beam/100K/2/contradiction_resolution-0", "beam/100K/3/event_ordering-0", "beam/100K/4/information_extraction-0",
+        "beam/100K/5/instruction_following-0", "beam/100K/6/knowledge_update-0", "beam/100K/7/multi_session_reasoning-0", "beam/100K/8/preference_following-0",
+        "beam/100K/9/summarization-0", "beam/100K/10/temporal_reasoning-0", "beam/100K/11/abstention-1", "beam/100K/12/contradiction_resolution-1",
+        "beam/100K/13/event_ordering-1", "beam/100K/14/information_extraction-1", "beam/100K/15/instruction_following-1", "beam/100K/16/knowledge_update-1"
+      ]
+    }
+  ],
+  "arms": {
+    "stock": "7348ae2c993187ab6b7e8252ae8f137305e62da0f6f87fa6a3b6252e81bc7940",
+    "scroll": "7348ae2c993187ab6b7e8252ae8f137305e62da0f6f87fa6a3b6252e81bc7940"
+  }
+}

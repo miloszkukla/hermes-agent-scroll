@@ -2,10 +2,11 @@
 
 ## Decision
 
-**NO-GO.** This pre-commit checkpoint is not authorization for a live-model
-evaluation. The reviewed live executors and user-approved OpenRouter access now
-exist, but an exact implementation commit, frozen manifests, final fresh-context
-review, and a recorded `GO` are still required.
+**GO for the two frozen live lanes only.** The exact implementation candidate,
+credential-free manifests, source and corpus pins, and independent fresh review
+below are complete. The task owner authorized the OpenRouter credential in
+`/home/codex/.hermes/.env` on 2026-09-04. No live-model request has occurred
+before this record.
 
 ## Frozen inputs at this checkpoint
 
@@ -17,7 +18,10 @@ review, and a recorded `GO` are still required.
 | Credential-free manifest SHA-256 | `b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e` |
 | Stage 0 report SHA-256 | `295aacf7cbadcd197d5b82bd70b6a4d5edb27049099735302acb9541413dc7d3` |
 | Evaluation advisory SHA-256 | `f4fe4183547b18a411e54d2e6c5c9d3b5e7f6ae87f96cd747a499953de0e7939` |
-| Implementation commit | pending the reviewed candidate checkpoint |
+| Implementation commit | `f86f3bb2f3f3a6de517b82382eb17e30277eb763` |
+| Memory live-manifest SHA-256 | `573680481d35fde73d48a89e0b4797425107f48e8372d8b4422fc3d8d7b58566` |
+| Coding live-manifest SHA-256 | `ac484670fc0f2a5c8da77fee2caa9f963563cc377fbbbd7efc31fdcf7671bb73` |
+| Memory/coding cost ceilings | `$15.00` / `$25.00` |
 
 ## Passing credential-free evidence
 
@@ -69,10 +73,15 @@ review, and a recorded `GO` are still required.
 - `ruff check` and `git diff --check` passed. Ruff emitted the existing
   malformed `# noqa` warning at `run_agent.py:108`; it reported no violations.
 - [PRECOMMIT-REVIEW-BUNDLE.md](PRECOMMIT-REVIEW-BUNDLE.md) pins the complete
-  reviewable worktree diff and delivery-file hashes without presenting the
-  uncommitted snapshot as a GO-eligible implementation commit.
+  reviewed candidate diff and credential-free delivery-file hashes for this
+  GO-eligible implementation commit.
+- The final live-executor review found no actionable P0/P1/P2 on
+  `f86f3bb2f3f3a6de517b82382eb17e30277eb763`; it specifically rechecked
+  durable host compaction, 100K-token histories with valid failed/retried
+  terminal groups, fail-closed source/corpus pinning, and source-CWD judge
+  imports. See [FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md](FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md).
 
-## Blocking conditions
+## Completed gate items and execution limits
 
 1. The final 83-test desktop E2E suite is green under Cage/headless Wayland.
    The base branch has no matching `scroll-repl` scenario or target image, so a
@@ -93,9 +102,10 @@ review, and a recorded `GO` are still required.
    `UPSTREAM-EVALUATION-DRIFT-LANE.md`. The upstream BEAM and Terminal-Bench
    local corpora are absent. The credential-free paired runner validates
    ordering, token/cost caps, model-probe redaction, and answer digests, but
-   `evals.scroll.hermes_live` now supplies a source-locked Hermes executor and
+   `evals.scroll.hermes_live` supplies a source-locked Hermes executor and
    judge boundary, and `evals.scroll.coding_live` supplies 20 fixed objective
-   coding trajectories. No reviewed live manifest or paired result exists yet.
+   coding trajectories. The reviewed manifests freeze the 32/16 memory set and
+   the complete 20-trajectory coding set; no paired live result exists yet.
    The eight local synthetic fixtures remain deliberately narrower and cannot
    stand in for either live lane.
 3. An independent fresh-context technical review completed with no P1/P2
@@ -103,17 +113,15 @@ review, and a recorded `GO` are still required.
    failure fallback, recursive manifest validation, tracked bootstrap, resumed
    snapshot publication, desktop lifecycle coverage, and SQL projection bounds
    were repaired. That review predates the live executors and is superseded for
-   gate purposes; a fresh complete-diff review remains required.
+   gate purposes; the subsequent fresh complete-diff live-executor review is
+   recorded above and cleared the candidate.
 4. The task owner authorized OpenRouter access and selected the base branch as
-   the visual reference. An authenticated credential-free model-catalog smoke
-   has passed, but the exact agent/judge model, budgets, pricing, manifests,
-   and source/dataset pins are not yet recorded in a reviewed `GO` artifact.
+   the visual reference. The reviewed `GO` manifests pin
+   `openai/gpt-5.6-luna`, seed, budgets, pricing, and all source/dataset inputs.
 
-To move to GO: commit the reviewed implementation candidate, freeze and verify
-the credential-free manifests, rerun affected deterministic evidence, obtain
-the fresh-context review, and record its reviewer, findings, disposition,
-commit, and authorized live-model manifest. Any material source, dependency,
-prompt, dataset, model, or manifest change invalidates the resulting decision.
+This GO authorizes only the recorded commands and frozen manifests. Any material
+source, dependency, prompt, dataset, model, task set, or manifest change
+invalidates it and requires another candidate review.
 
 ## Visual artifact disposition
 

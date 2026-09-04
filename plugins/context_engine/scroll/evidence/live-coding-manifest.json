@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "live_model": true,
+  "implementation_commit": "f86f3bb2f3f3a6de517b82382eb17e30277eb763",
+  "plan_sha256": "7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210",
+  "credential_free_manifest_sha256": "b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e",
+  "agent_prompt_sha256": "fadfc8194fef35bff3fdaafcd983830bf33dab9177c831349e797159893c56d5",
+  "provider": "openrouter",
+  "authentication_mode": "user-authorized OPENROUTER_API_KEY from Hermes home",
+  "agent_model": "openai/gpt-5.6-luna",
+  "judge_model": "none-objective-verifier",
+  "judge_source": "fixed workspace pytest verifier",
+  "temperature": null,
+  "seed": 20260904,
+  "context_window_tokens": 80000,
+  "max_iterations": 8,
+  "max_output_tokens": 4096,
+  "input_token_budget": 1000000,
+  "output_token_budget": 32768,
+  "input_price_per_token": 0.0000004,
+  "output_price_per_token": 0.0000018,
+  "cost_ceiling_usd": 25.0,
+  "source_revisions": {
+    "hermes_base": "29112bef099274229cadff79cdff7bf7b99c4b77",
+    "scroll": "313077708ea105cc79bf0a997338e14dae916f8c"
+  },
+  "licenses": {
+    "hermes": "MIT",
+    "scroll": "Apache-2.0"
+  },
+  "datasets": [
+    {
+      "name": "coding-trajectories",
+      "revision": "commit:f86f3bb2f3f3a6de517b82382eb17e30277eb763; generated-fixed-v3; min-rough-tokens:100000",
+      "item_ids": [
+        "coding/01-labels", "coding/02-flags", "coding/03-limits", "coding/04-routes", "coding/05-render",
+        "coding/06-labels", "coding/07-flags", "coding/08-limits", "coding/09-routes", "coding/10-render",
+        "coding/11-labels", "coding/12-flags", "coding/13-limits", "coding/14-routes", "coding/15-render",
+        "coding/16-labels", "coding/17-flags", "coding/18-limits", "coding/19-routes", "coding/20-render"
+      ]
+    }
+  ],
+  "arms": {
+    "stock": "66052180ef62bac3177a5781c56e19c000fdcc893572a17922adabeea3d0106d",
+    "scroll": "66052180ef62bac3177a5781c56e19c000fdcc893572a17922adabeea3d0106d"
+  }
+}
