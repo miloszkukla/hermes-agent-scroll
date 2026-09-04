@@ -42,9 +42,10 @@ stream too early. Candidate `2556eb457db6a682dc1e8ceb25f06bf409532e78`
 retains timer-scoped orphan cleanup. Its reviewed r3 coding runtime wrote 18
 raw worker results but no report: two stock compressions emitted substantive
 progress yet reached the host's 600-second total ceiling. Candidate
-`9450c70cece4f3c28c2c1a892e2d27bacf9386cd` freezes a 900-second coding-only
-host ceiling for both arms. The previous GO is invalidated until this candidate
-and its revised manifest clear focused review.
+`a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` freezes a 900-second coding-only
+host ceiling for both arms and binds schema v2 to coding before provenance or
+OAuth. The previous GO is invalidated until this candidate and its revised
+manifest clear focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -57,22 +58,28 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `9450c70cece4f3c28c2c1a892e2d27bacf9386cd` |
+| Coding implementation commit | `a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding manifest SHA-256 | `7e90661a4e151929e63ede3dc038f9eff4f1b93468dfaed4b2868b01bf1e46c7` |
+| Coding report manifest digest (canonical JSON SHA-256) | `d824f2f401946c5fe6d740474931fc6321400417429449bb650c90ca0f823337` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
+
+The coding report's manifest digest is SHA-256 over
+`json.dumps(manifest, sort_keys=True, separators=(',', ':'))`, matching
+`evals.scroll.coding_live`; it is not the byte hash of the pretty-printed file.
 
 The coding manifest is schema v2 and freezes
 `context_total_ceiling_seconds: 900`. This preserves the same model, task set,
 input budgets, compression behavior, and four-worker cap for stock and Scroll;
 it only gives a substantively streaming long summary 50% more wall-clock time.
-The adapter retains its independent 1,200-second hard backstop.
+The adapter retains its independent 1,200-second hard backstop. Schema v1 is
+reserved for the completed memory lane; each evaluator rejects the other lane's
+schema before provenance, credential, or provider work.
 
 ## Route and isolation contract
 
@@ -160,6 +167,14 @@ failure addressed by the prior candidates. It was a healthy-but-slow long
 summary that reached the shared 600-second host ceiling. No r3 raw result will
 be reused; the schema-v2 manifest makes the 900-second ceiling explicit and
 requires a new focused gate before another attempt.
+
+The first focused review of the 900-second candidate returned P1/NO-GO because
+schema v2 was accepted by the memory executor without carrying its ceiling,
+while schema v1 reached the coding executor before its missing ceiling field
+failed. Candidate `a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` resolves this by
+reserving v1 for memory and v2 for coding before provenance, credential, or
+provider work; direct regression coverage asserts both rejections. It awaits a
+new focused disposition.
 
 ## Completed memory lane
 
