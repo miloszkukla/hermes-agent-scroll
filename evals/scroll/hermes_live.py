@@ -77,6 +77,16 @@ def _read_json(path: Path) -> Any:
         raise LiveRunError(f"could not read evaluation input {path}") from exc
 
 
+def _resumable_worker_result(path: Path) -> dict[str, Any]:
+    result = _read_json(path)
+    usage = result.get("usage") if isinstance(result, dict) else None
+    if not isinstance(result, dict) or not isinstance(result.get("answer"), str) or not result["answer"].strip() or not isinstance(usage, dict):
+        raise LiveRunError("saved worker result is invalid")
+    if any(not isinstance(usage.get(field), int) or isinstance(usage.get(field), bool) or usage[field] < 0 for field in ("input_tokens", "output_tokens", "cache_read_tokens")):
+        raise LiveRunError("saved worker result has invalid usage")
+    return result
+
+
 def _secure_directory(path: Path) -> None:
     try:
         path.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -183,7 +193,7 @@ def _auxiliary_usage(db: Any, session_id: str, expected_model: str) -> tuple[int
                 "SELECT COALESCE(input_tokens, 0), COALESCE(output_tokens, 0), COALESCE(cache_read_tokens, 0), model, billing_provider "
                 "FROM session_model_usage WHERE session_id = ? AND task <> ''", (session_id,),
             ).fetchall()
-        if any(row[3] != expected_model or row[4] != "openai-codex" for row in rows):
+        if any(row[3] != expected_model or row[4] not in {"", "openai-codex"} for row in rows):
             raise LiveRunError("auxiliary evaluation left the ChatGPT Codex OAuth route")
         return tuple(sum(int(row[index] or 0) for row in rows) for index in range(3))
     except Exception as exc:
@@ -561,7 +571,7 @@ def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], 
 
 def run_live_evaluation(
     manifest_path: Path, *, longmemeval_path: Path, beam_chats_root: Path, scroll_source: Path,
-    runtime_root: Path, output_path: Path, credential_home: Path = Path.home() / ".hermes",
+    runtime_root: Path, output_path: Path, credential_home: Path = Path.home() / ".hermes", resume: bool = False,
 ) -> dict[str, Any]:
     manifest = _read_json(manifest_path)
     if not isinstance(manifest, dict):
@@ -606,6 +616,8 @@ def run_live_evaluation(
         job_root = runtime_root / "jobs" / hashlib.sha256(f"{arm}:{item.identifier}".encode()).hexdigest()
         _secure_directory(job_root)
         result_path = job_root / "result.json"
+        if resume and result_path.is_file():
+            return _resumable_worker_result(result_path)
         job_path = job_root / "job.json"
         _write_private_json(job_path, {
             "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
@@ -653,6 +665,7 @@ def main() -> None:
     parser.add_argument("--scroll-source", type=Path)
     parser.add_argument("--runtime-root", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     if args.worker:
         _worker_result(args.worker)
@@ -663,6 +676,7 @@ def main() -> None:
     report = run_live_evaluation(
         args.manifest, longmemeval_path=args.longmemeval, beam_chats_root=args.beam_chats,
         scroll_source=args.scroll_source, runtime_root=args.runtime_root, output_path=args.output,
+        resume=args.resume,
     )
     print(json.dumps({"manifest_sha256": report["manifest_sha256"], "billing_mode": report["billing_mode"], "rows": len(report["rows"])}, sort_keys=True))
 

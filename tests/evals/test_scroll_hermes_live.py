@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from evals.scroll.coding_live import _sandboxed_worker_command
-from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _lease_chatgpt_codex_access_token, _prepare_coding_scenario, _require_clean_git_checkout, _secure_directory, _worker_config, _write_private_json, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _lease_chatgpt_codex_access_token, _prepare_coding_scenario, _require_clean_git_checkout, _resumable_worker_result, _secure_directory, _worker_config, _write_private_json, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 from toolsets import resolve_toolset
 
 
@@ -72,13 +72,25 @@ def test_agent_prompt_has_a_stable_sha256():
     assert agent_prompt_sha256() == agent_prompt_sha256()
 
 
+def test_resume_accepts_only_a_complete_worker_result(tmp_path):
+    result = tmp_path / "result.json"
+    result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}}), encoding="utf-8")
+
+    assert _resumable_worker_result(result)["answer"] == "done"
+    result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2}}), encoding="utf-8")
+    with pytest.raises(LiveRunError, match="invalid usage"):
+        _resumable_worker_result(result)
+
+
 def test_live_worker_counts_auxiliary_compression_usage():
     class Connection:
+        route = "openai-codex"
+
         def execute(self, _query, _params):
             return self
 
         def fetchall(self):
-            return [(12, 3, 4, "gpt-5.6-luna", "openai-codex")]
+            return [(12, 3, 4, "gpt-5.6-luna", self.route)]
 
     class Database:
         @contextmanager
@@ -86,6 +98,11 @@ def test_live_worker_counts_auxiliary_compression_usage():
             yield Connection()
 
     assert _auxiliary_usage(Database(), "session", "gpt-5.6-luna") == (12, 3, 4)
+    Connection.route = ""
+    assert _auxiliary_usage(Database(), "session", "gpt-5.6-luna") == (12, 3, 4)
+    Connection.route = "other-provider"
+    with pytest.raises(LiveRunError, match="auxiliary"):
+        _auxiliary_usage(Database(), "session", "gpt-5.6-luna")
     with pytest.raises(LiveRunError, match="auxiliary"):
         _auxiliary_usage(object(), "session", "gpt-5.6-luna")
 
