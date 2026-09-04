@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from evals.scroll.coding_live import _sandboxed_worker_command
-from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _lease_chatgpt_codex_access_token, _prepare_coding_scenario, _require_clean_git_checkout, _resumable_worker_result, _secure_directory, _worker_config, _write_private_json, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _lease_chatgpt_codex_access_token, _prepare_coding_scenario, _require_clean_git_checkout, _resumable_worker_result, _secure_directory, _worker_config, _worker_result_payload, _write_private_json, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 from toolsets import resolve_toolset
 
 
@@ -72,14 +72,22 @@ def test_agent_prompt_has_a_stable_sha256():
     assert agent_prompt_sha256() == agent_prompt_sha256()
 
 
-def test_resume_accepts_only_a_complete_worker_result(tmp_path):
+def test_resume_rejects_stale_or_mismatched_worker_results(tmp_path):
     result = tmp_path / "result.json"
-    result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}}), encoding="utf-8")
+    provenance = {"manifest_sha256": "manifest", "implementation_commit": "commit", "arm": "stock", "identifier": "item", "model": "model", "history_sha256": "history", "probe_sha256": "probe"}
+    result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "provenance": provenance}), encoding="utf-8")
 
-    assert _resumable_worker_result(result)["answer"] == "done"
+    assert _resumable_worker_result(result, provenance)["answer"] == "done"
+    assert _resumable_worker_result(result, {**provenance, "implementation_commit": "stale"}) is None
+    assert _resumable_worker_result(result, {**provenance, "identifier": "other"}) is None
     result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2}}), encoding="utf-8")
-    with pytest.raises(LiveRunError, match="invalid usage"):
-        _resumable_worker_result(result)
+    assert _resumable_worker_result(result, provenance) is None
+
+
+def test_coding_worker_result_payload_needs_no_resume_provenance():
+    result = _worker_result_payload("done", 1, 2, 3, 0.5)
+
+    assert result == {"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}
 
 
 def test_live_worker_counts_auxiliary_compression_usage():

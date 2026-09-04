@@ -77,13 +77,23 @@ def _read_json(path: Path) -> Any:
         raise LiveRunError(f"could not read evaluation input {path}") from exc
 
 
-def _resumable_worker_result(path: Path) -> dict[str, Any]:
-    result = _read_json(path)
+def _resumable_worker_result(path: Path, provenance: Mapping[str, str]) -> dict[str, Any] | None:
+    try:
+        result = _read_json(path)
+    except LiveRunError:
+        return None
     usage = result.get("usage") if isinstance(result, dict) else None
-    if not isinstance(result, dict) or not isinstance(result.get("answer"), str) or not result["answer"].strip() or not isinstance(usage, dict):
-        raise LiveRunError("saved worker result is invalid")
+    if not isinstance(result, dict) or result.get("provenance") != dict(provenance) or not isinstance(result.get("answer"), str) or not result["answer"].strip() or not isinstance(usage, dict):
+        return None
     if any(not isinstance(usage.get(field), int) or isinstance(usage.get(field), bool) or usage[field] < 0 for field in ("input_tokens", "output_tokens", "cache_read_tokens")):
-        raise LiveRunError("saved worker result has invalid usage")
+        return None
+    return result
+
+
+def _worker_result_payload(answer: str, input_tokens: int, output_tokens: int, cache_read_tokens: int, scenario_latency_seconds: float, provenance: Mapping[str, str] | None = None) -> dict[str, Any]:
+    result = {"answer": answer, "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cache_read_tokens": cache_read_tokens}, "scenario_latency_seconds": scenario_latency_seconds}
+    if provenance is not None:
+        result["provenance"] = dict(provenance)
     return result
 
 
@@ -479,10 +489,9 @@ def _worker_result(job_path: Path) -> None:
         input_tokens += auxiliary_input
         output_tokens += auxiliary_output
         cache_read_tokens += auxiliary_cache_read
-        Path(job["result_path"]).write_text(json.dumps({
-            "answer": answer, "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cache_read_tokens": cache_read_tokens},
-            "scenario_latency_seconds": scenario_latency_seconds,
-        }), encoding="utf-8")
+        Path(job["result_path"]).write_text(json.dumps(_worker_result_payload(
+            answer, input_tokens, output_tokens, cache_read_tokens, scenario_latency_seconds, job.get("result_provenance"),
+        )), encoding="utf-8")
     finally:
         reset_accounting_context(accounting_token)
         if agent is not None:
@@ -608,6 +617,7 @@ def run_live_evaluation(
     runtime_root = runtime_root.resolve()
     _secure_directory(runtime_root)
     _secure_directory(runtime_root / "jobs")
+    manifest_digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
     def execute(arm: str, probe: Mapping[str, str]) -> Mapping[str, Any]:
         item = by_id.get(probe["id"])
@@ -616,14 +626,22 @@ def run_live_evaluation(
         job_root = runtime_root / "jobs" / hashlib.sha256(f"{arm}:{item.identifier}".encode()).hexdigest()
         _secure_directory(job_root)
         result_path = job_root / "result.json"
+        result_provenance = {
+            "manifest_sha256": manifest_digest, "implementation_commit": manifest["implementation_commit"],
+            "arm": arm, "identifier": item.identifier, "model": manifest["agent_model"],
+            "history_sha256": hashlib.sha256(json.dumps(item.history, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+            "probe_sha256": hashlib.sha256(json.dumps(item.public_probe, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+        }
         if resume and result_path.is_file():
-            return _resumable_worker_result(result_path)
+            resumed = _resumable_worker_result(result_path, result_provenance)
+            if resumed is not None:
+                return resumed
         job_path = job_root / "job.json"
         _write_private_json(job_path, {
             "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
             "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
             "history": item.history, "probe": item.public_probe, "runtime_home": str(job_root / "home"),
-            "api_key": _lease_chatgpt_codex_access_token(credential_home), "result_path": str(result_path),
+            "api_key": _lease_chatgpt_codex_access_token(credential_home), "result_path": str(result_path), "result_provenance": result_provenance,
         })
         try:
             subprocess.run([sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(job_path)], cwd=Path(__file__).resolve().parents[2], env=_isolated_subprocess_environment(), check=True, capture_output=True, text=True, timeout=900)
