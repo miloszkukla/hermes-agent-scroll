@@ -301,6 +301,13 @@ def _build_live_agent(factory: Any, job: Mapping[str, Any], session_id: str, db:
     )
 
 
+def _configure_coding_workspace(workspace: Path, session_id: str, register: Any) -> None:
+    if not workspace.is_dir():
+        raise LiveRunError("coding workspace is unavailable")
+    os.environ["TERMINAL_CWD"] = str(workspace)
+    register(session_id, {"cwd": str(workspace)})
+
+
 def _worker_result(job_path: Path) -> None:
     job = _read_json(job_path)
     runtime_home = Path(job["runtime_home"])
@@ -318,16 +325,14 @@ def _worker_result(job_path: Path) -> None:
         "    provider: openrouter\n"
         f"    model: {job['model']}\n"
         "    reasoning_effort: none\n"
-        f"    max_output_tokens: {job['output_token_budget']}\n",
+        f"    max_output_tokens: {job['max_output_tokens']}\n",
         encoding="utf-8",
     )
     os.environ["HERMES_HOME"] = str(runtime_home)
     coding = job.get("lane") == "coding"
+    workspace = None
     if coding:
         workspace = Path(str(job.get("workspace") or ""))
-        if not workspace.is_dir():
-            raise LiveRunError("coding workspace is unavailable")
-        os.environ["TERMINAL_CWD"] = str(workspace)
     from hermes_cli.env_loader import load_hermes_dotenv
 
     load_hermes_dotenv(hermes_home=job["credential_home"], load_external_secrets=False)
@@ -342,6 +347,12 @@ def _worker_result(job_path: Path) -> None:
     db.append_messages_batch(session_id, job["history"], chunk_rows=256)
     history = db.get_messages_as_conversation(session_id, repair_alternation=True, include_row_ids=True)
     toolsets = _enabled_toolsets(job["arm"], coding)
+    clear_workspace = None
+    if coding:
+        from tools.terminal_tool import clear_task_env_overrides, register_task_env_overrides
+
+        _configure_coding_workspace(workspace, session_id, register_task_env_overrides)
+        clear_workspace = clear_task_env_overrides
     agent = None
     try:
         def build_agent():
@@ -361,7 +372,7 @@ def _worker_result(job_path: Path) -> None:
             scenario_latency_seconds = time.monotonic() - scenario_started
         response = agent.run_conversation(
             job["probe"]["question"], system_message=CODING_SYSTEM_PROMPT if coding else AGENT_SYSTEM_PROMPT,
-            conversation_history=history,
+            conversation_history=history, task_id=session_id if coding else None,
         )
         answer = response.get("final_response") if isinstance(response, dict) else None
         if not isinstance(answer, str) or not answer.strip() or (isinstance(response, dict) and response.get("failed")):
@@ -379,6 +390,8 @@ def _worker_result(job_path: Path) -> None:
     finally:
         if agent is not None:
             agent.close()
+        if clear_workspace is not None:
+            clear_workspace(session_id)
         db.close()
 
 

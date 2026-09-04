@@ -1,12 +1,13 @@
 """Live-evaluation loaders keep benchmark gold outside the agent probe."""
 
 import json
+import os
 import subprocess
 from contextlib import contextmanager
 
 import pytest
 
-from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, _build_live_agent, _enabled_toolsets, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 
 
 def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
@@ -84,6 +85,15 @@ def test_live_agent_uses_openrouter_chat_completions_for_seeded_runs():
     assert captured["provider"] == "openrouter"
     assert captured["api_mode"] == "chat_completions"
     assert captured["request_overrides"] == {"seed": 20260904}
+
+
+def test_coding_workspace_is_registered_for_the_worker_task(tmp_path, monkeypatch):
+    registrations = []
+
+    _configure_coding_workspace(tmp_path, "worker-session", lambda task_id, values: registrations.append((task_id, values)))
+
+    assert os.environ["TERMINAL_CWD"] == str(tmp_path)
+    assert registrations == [("worker-session", {"cwd": str(tmp_path)})]
 
 
 def test_coding_scenarios_drive_manual_selection_and_cold_rebuild(tmp_path):
