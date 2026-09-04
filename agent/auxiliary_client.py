@@ -2087,15 +2087,21 @@ class _CodexCompletionsAdapter:
                     # on a daemon and keep the owner polling the same deadline.
                     stream_consumption_done = threading.Event()
                     stream_consumption: Dict[str, Any] = {}
+                    stream_progress_hook = getattr(_aux_progress, "hook", None)
+                    stream_provider_response_hook = getattr(_aux_provider_response, "hook", None)
                     stream_consumption_context = contextvars.copy_context()
 
                     def _consume_event_stream() -> None:
                         try:
-                            stream_consumption["final"] = _consume_codex_event_stream(
-                                event_stream,
-                                model=str(resp_kwargs.get("model") or model),
-                                on_event=_on_each_event,
-                            )
+                            with (
+                                aux_progress_hook(stream_progress_hook),
+                                _aux_thread_local_hook(_aux_provider_response, stream_provider_response_hook),
+                            ):
+                                stream_consumption["final"] = _consume_codex_event_stream(
+                                    event_stream,
+                                    model=str(resp_kwargs.get("model") or model),
+                                    on_event=_on_each_event,
+                                )
                         except BaseException as exc:
                             stream_consumption["exception"] = exc
                         finally:

@@ -22,7 +22,9 @@ from agent.auxiliary_client import (
     _aggregate_chat_stream,
     _aggregate_chat_stream_async,
     _anthropic_event_has_content,
+    _aux_provider_response,
     _aux_stream_total_ceiling,
+    _aux_timing_hook,
     _codex_event_has_content,
     _create_with_progress,
     _notify_aux_progress,
@@ -414,6 +416,32 @@ class TestContentBearingProgress:
             adapter.create(messages=[{"role": "user", "content": "summarize"}])
 
         assert touches == [1, 1]
+
+    def test_codex_adapter_keeps_provider_response_hook_in_consumer(self):
+        events = [
+            SimpleNamespace(type="response.created"),
+            SimpleNamespace(type="response.output_text.delta", delta="token"),
+        ]
+        real_client = SimpleNamespace(
+            base_url="https://chatgpt.com/backend-api/codex",
+            responses=SimpleNamespace(create=lambda **_kwargs: iter(events)),
+        )
+        adapter = _CodexCompletionsAdapter(real_client, "gpt-5.6-sol")
+        responses = []
+
+        def _consume(stream, *, model, on_event):
+            del model
+            for event in stream:
+                on_event(event)
+            return SimpleNamespace(output=[], usage=None)
+
+        with (
+            patch("agent.codex_runtime._consume_codex_event_stream", _consume),
+            _aux_timing_hook(_aux_provider_response, lambda: responses.append(1)),
+        ):
+            adapter.create(messages=[{"role": "user", "content": "summarize"}])
+
+        assert responses == [1, 1]
 
     def test_anthropic_adapter_updates_fence_only_for_substantive_events(self):
         events = [
