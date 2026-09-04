@@ -18,12 +18,12 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `ff21affcfc09f0371392186a02b941537eb50713` |
+| Implementation commit | `ab1738ffd398e40ea0eb555a732ba37ea8891fab` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
-| Memory manifest SHA-256 | `337e1827ebbc0bf14116cd8109e5e022825c361fe0678959f2562419e650224f` |
-| Coding manifest SHA-256 | `d0ead17e87d577dab089a0e9a01ce68d7085df19fbbd3e74142d134753b891c5` |
+| Memory manifest SHA-256 | `753d3ba4c3a747afc55bdd6fe6a2b73ffa6a8749066e7cd339ff56c60ac7d07a` |
+| Coding manifest SHA-256 | `d57139f4579a8f7524f63db22553f10245c47fff410ecee6f335855022a9525f` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -36,8 +36,9 @@ statistics. It is not sent to the Codex Responses transport.
 - The parent alone resolves and refreshes the caller's OAuth store under the
   Hermes auth lock. Before launching a bounded worker or judge, it leases a
   ChatGPT Codex access token with 21 minutes of refresh headroom. Workers and
-  judges receive no `auth.json` or refresh token; a worker unlinks its one-use
-  lease file before constructing the agent.
+  judges receive no `auth.json` or refresh token. Runtime/job directories are
+  owner-only and the one-use lease file is owner-read/write only; a worker
+  unlinks it before constructing the agent.
 - Auxiliary compression is explicitly configured for the same Codex route and
   model and uses the already leased access token rather than resolving a
   credential store. Session accounting rejects an auxiliary call using another
@@ -71,7 +72,7 @@ estimator was invalid.
 ## Verification and independent disposition
 
 - `pytest -q tests/evals/test_scroll_hermes_live.py tests/evals/test_scroll_coding_trajectories.py tests/evals/test_scroll_paired_runner.py tests/evals/test_scroll_live_manifest.py tests/plugins/test_scroll_documentation.py tests/agent/test_auxiliary_client.py::TestBuildCodexClient tests/agent/test_codex_cloudflare_headers.py`
-  — 45 passed.
+  — 47 passed.
 - `ruff check agent/auxiliary_client.py evals/scroll/hermes_live.py
   evals/scroll/coding_live.py tests/evals/test_scroll_hermes_live.py
   tests/agent/test_auxiliary_client.py tests/agent/test_codex_cloudflare_headers.py`
