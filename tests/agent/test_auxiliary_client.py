@@ -708,6 +708,28 @@ class TestAnthropicOAuthFlag:
 
 
 class TestBuildCodexClient:
+    def test_configured_codex_compression_inherits_main_runtime_access_token(self):
+        import agent.auxiliary_client as aux
+
+        response = MagicMock()
+        response.choices = [MagicMock(message=MagicMock(content="summary"))]
+        client = MagicMock()
+        client.chat.completions.create.return_value = response
+        runtime = {"provider": "openai-codex", "model": "gpt-5.6-luna", "base_url": "https://chatgpt.com/backend-api/codex", "api_key": "leased-token", "api_mode": "codex_responses"}
+        aux.shutdown_cached_clients()
+        try:
+            with (
+                patch("agent.auxiliary_client._get_auxiliary_task_config", return_value={"provider": "openai-codex", "model": "gpt-5.6-luna", "api_mode": "codex_responses"}),
+                patch("agent.auxiliary_client._read_codex_access_token", side_effect=AssertionError("auth store should not run")),
+                patch("agent.auxiliary_client.resolve_provider_client", return_value=(client, "gpt-5.6-luna")) as resolve,
+            ):
+                result = aux.call_llm(task="compression", main_runtime=runtime, messages=[{"role": "user", "content": "summarize"}])
+        finally:
+            aux.shutdown_cached_clients()
+
+        assert result is response
+        assert resolve.call_args.kwargs["explicit_api_key"] == "leased-token"
+
     def test_explicit_access_token_bypasses_auth_store_and_credential_pool(self):
         explicit_token = _jwt_with_claims({"https://api.openai.com/auth": {"chatgpt_account_id": "eval-account"}})
         with (

@@ -8227,11 +8227,14 @@ def _get_cached_client(
         except RuntimeError:
             pass
     runtime = _normalize_main_runtime(main_runtime)
+    effective_api_key = api_key
+    if not effective_api_key and str(provider or "").lower() == str(runtime.get("provider") or "").lower():
+        effective_api_key = runtime.get("api_key") or None
     cache_key = _client_cache_key(
         provider,
         async_mode=async_mode,
         base_url=base_url,
-        api_key=api_key,
+        api_key=effective_api_key,
         api_mode=api_mode,
         main_runtime=main_runtime,
         is_vision=is_vision,
@@ -8270,7 +8273,6 @@ def _get_cached_client(
     # always prefers env vars (first-entry bias), which bypasses pool rotation:
     # after key #1 is marked exhausted the retry would still get key #1 from
     # the env var and fail again, causing the retry2_err handler to mark key #2.
-    effective_api_key = api_key
     if not effective_api_key:
         _pe = _peek_pool_entry(_normalize_aux_provider(provider))
         if _pe is not None:
