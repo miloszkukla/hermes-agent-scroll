@@ -11,6 +11,7 @@ import argparse
 from collections import Counter
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -345,9 +346,9 @@ def _require_chatgpt_codex_oauth(hermes_home: Path) -> None:
         raise LiveRunError("ChatGPT Codex OAuth credential is unavailable")
 
 
-def _lease_chatgpt_codex_access_token(hermes_home: Path, resolver: Any = None, token_is_expiring: Any = None) -> str:
+def _lease_chatgpt_codex_access_token(hermes_home: Path, resolver: Any = None) -> str:
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
-    from hermes_cli.auth import _codex_access_token_is_expiring, resolve_codex_runtime_credentials
+    from hermes_cli.auth import _decode_jwt_claims, resolve_codex_runtime_credentials
 
     token = set_hermes_home_override(hermes_home)
     try:
@@ -360,8 +361,9 @@ def _lease_chatgpt_codex_access_token(hermes_home: Path, resolver: Any = None, t
     api_key = api_key.strip()
     source = credentials.get("source")
     if source == "credential_pool":
-        if (token_is_expiring or _codex_access_token_is_expiring)(api_key, _WORKER_ACCESS_TOKEN_MINIMUM_TTL_SECONDS):
-            raise LiveRunError("parent-managed ChatGPT Codex credential-pool lease expires before the worker minimum")
+        exp = _decode_jwt_claims(api_key).get("exp")
+        if not isinstance(exp, (int, float)) or not math.isfinite(float(exp)) or float(exp) <= time.time() + _WORKER_ACCESS_TOKEN_MINIMUM_TTL_SECONDS:
+            raise LiveRunError("parent-managed ChatGPT Codex credential-pool lease needs a verifiable 21-minute lifetime")
     elif source != "hermes-auth-store":
         raise LiveRunError("evaluation requires a parent-managed ChatGPT Codex OAuth store or credential pool")
     return api_key

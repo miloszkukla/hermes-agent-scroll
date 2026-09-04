@@ -1,5 +1,6 @@
 """Live-evaluation loaders keep benchmark gold outside the agent probe."""
 
+import base64
 import json
 import os
 import stat
@@ -13,6 +14,11 @@ import pytest
 from evals.scroll.coding_live import _sandboxed_worker_command
 from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _lease_chatgpt_codex_access_token, _prepare_coding_scenario, _require_clean_git_checkout, _secure_directory, _worker_config, _write_private_json, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 from toolsets import resolve_toolset
+
+
+def _jwt_with_exp(exp):
+    encode = lambda value: base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
+    return f"{encode({'alg': 'none'})}.{encode({'exp': exp})}.signature"
 
 
 def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
@@ -107,12 +113,18 @@ def test_parent_leases_worker_access_tokens_with_refresh_headroom(tmp_path):
 
 
 def test_parent_leases_worker_access_tokens_from_the_credential_pool(tmp_path):
-    assert _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential_pool", "api_key": "leased-token"}, lambda *_args: False) == "leased-token"
+    with patch("evals.scroll.hermes_live.time.time", return_value=1_000):
+        assert _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential_pool", "api_key": _jwt_with_exp(2_261)}) == _jwt_with_exp(2_261)
 
 
 def test_parent_rejects_expiring_credential_pool_lease(tmp_path):
-    with pytest.raises(LiveRunError, match="expires"):
-        _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential_pool", "api_key": "token"}, lambda *_args: True)
+    with patch("evals.scroll.hermes_live.time.time", return_value=1_000), pytest.raises(LiveRunError, match="verifiable"):
+        _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential_pool", "api_key": _jwt_with_exp(2_260)})
+
+
+def test_parent_rejects_unverifiable_credential_pool_lease(tmp_path):
+    with pytest.raises(LiveRunError, match="verifiable"):
+        _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential_pool", "api_key": "opaque-token"})
 
 
 def test_parent_rejects_non_store_worker_access_token_sources(tmp_path):

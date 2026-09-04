@@ -43,10 +43,10 @@ statistics. It is not sent to the Codex Responses transport.
   the Hermes auth lock. Before launching a bounded worker or judge, it leases
   a ChatGPT Codex access token with 21 minutes of refresh headroom. The
   supported singleton store and credential-pool layouts are both parent-only;
-  a pool lease must already meet that headroom. Workers and judges receive no
-  `auth.json` or refresh token. Runtime/job directories are owner-only and the
-  one-use lease file is owner-read/write only; a worker unlinks it before
-  constructing the agent.
+  a pool lease must have a finite numeric JWT expiry beyond that headroom.
+  Workers and judges receive no `auth.json` or refresh token. Runtime/job
+  directories are owner-only and the one-use lease file is owner-read/write
+  only; a worker unlinks it before constructing the agent.
 - Auxiliary compression is explicitly configured for the same Codex route and
   model. When that configured route matches the main route, auxiliary routing
   inherits the already leased access token rather than resolving a credential
