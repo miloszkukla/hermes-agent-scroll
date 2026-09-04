@@ -54,7 +54,7 @@ def _usage(value: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, f
     if not isinstance(raw, Mapping):
         raise LiveRunError("coding executor usage is unavailable")
     result = {}
-    for key, limit in (("input_tokens", manifest["input_token_budget"]), ("output_tokens", manifest["output_token_budget"])):
+    for key, limit in (("input_tokens", manifest["input_token_budget"]), ("output_tokens", manifest["output_token_budget"]), ("cache_read_tokens", manifest["cache_read_token_budget"])):
         number = raw.get(key)
         if not isinstance(number, (int, float)) or isinstance(number, bool) or number < 0 or number > limit:
             raise LiveRunError(f"coding executor usage.{key} violates the frozen budget")
@@ -108,8 +108,8 @@ def run_coding_evaluation(
         job_path = job_root / "job.json"
         job_path.write_text(json.dumps({
             "lane": "coding", "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
-            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"],
-            "input_price_per_token": manifest["input_price_per_token"], "output_price_per_token": manifest["output_price_per_token"],
+            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
+            "input_price_per_token": manifest["input_price_per_token"], "output_price_per_token": manifest["output_price_per_token"], "cache_read_price_per_token": manifest["cache_read_price_per_token"],
             "history": item.history(), "probe": dict(probe), "scenario": item.scenario, "runtime_home": str(job_root / "home"), "workspace": str(workspace),
             "credential_home": str(credential_home), "result_path": str(result_path),
         }), encoding="utf-8")

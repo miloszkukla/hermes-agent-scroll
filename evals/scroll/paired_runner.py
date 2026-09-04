@@ -15,7 +15,7 @@ class PairedRunError(RuntimeError):
 
 
 _MODEL_PROBE_KEYS = ("id", "type", "question")
-_USAGE_KEYS = ("input_tokens", "output_tokens", "cost_usd")
+_USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens", "cost_usd")
 
 
 def model_probe(probe: Mapping[str, Any]) -> dict[str, str]:
@@ -50,6 +50,8 @@ def _usage(value: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, f
         raise PairedRunError("executor exceeded frozen input_token_budget")
     if usage["output_tokens"] > manifest["output_token_budget"]:
         raise PairedRunError("executor exceeded frozen output_token_budget")
+    if usage["cache_read_tokens"] > manifest["cache_read_token_budget"]:
+        raise PairedRunError("executor exceeded frozen cache_read_token_budget")
     return usage
 
 

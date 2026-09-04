@@ -67,14 +67,14 @@ def test_live_worker_counts_auxiliary_compression_usage():
             return self
 
         def fetchone(self):
-            return (12, 3)
+            return (12, 3, 4)
 
     class Database:
         @contextmanager
         def _read_ctx(self):
             yield Connection()
 
-    assert _auxiliary_usage(Database(), "session") == (12, 3)
+    assert _auxiliary_usage(Database(), "session") == (12, 3, 4)
     with pytest.raises(LiveRunError, match="auxiliary"):
         _auxiliary_usage(object(), "session")
 

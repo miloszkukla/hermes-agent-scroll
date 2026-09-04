@@ -148,14 +148,14 @@ def _history_row(session: int, date: str | None, role: str, content: str) -> dic
     return {"role": role, "content": f"{tag} {role}: {content.strip()}"}
 
 
-def _auxiliary_usage(db: Any, session_id: str) -> tuple[int, int]:
+def _auxiliary_usage(db: Any, session_id: str) -> tuple[int, int, int]:
     try:
         with db._read_ctx() as conn:
             row = conn.execute(
-                "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0) "
+                "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0), COALESCE(SUM(cache_read_tokens), 0) "
                 "FROM session_model_usage WHERE session_id = ? AND task <> ''", (session_id,),
             ).fetchone()
-        return int(row[0] or 0), int(row[1] or 0)
+        return int(row[0] or 0), int(row[1] or 0), int(row[2] or 0)
     except Exception as exc:
         raise LiveRunError("could not account for auxiliary evaluation usage") from exc
 
@@ -381,12 +381,14 @@ def _worker_result(job_path: Path) -> None:
             raise LiveRunError("Hermes evaluation arm failed before a final answer")
         input_tokens = int(getattr(agent, "session_input_tokens", 0) or 0)
         output_tokens = int(getattr(agent, "session_output_tokens", 0) or 0)
-        auxiliary_input, auxiliary_output = _auxiliary_usage(db, session_id)
+        cache_read_tokens = int(getattr(agent, "session_cache_read_tokens", 0) or 0)
+        auxiliary_input, auxiliary_output, auxiliary_cache_read = _auxiliary_usage(db, session_id)
         input_tokens += auxiliary_input
         output_tokens += auxiliary_output
-        cost = input_tokens * float(job["input_price_per_token"]) + output_tokens * float(job["output_price_per_token"])
+        cache_read_tokens += auxiliary_cache_read
+        cost = input_tokens * float(job["input_price_per_token"]) + output_tokens * float(job["output_price_per_token"]) + cache_read_tokens * float(job["cache_read_price_per_token"])
         Path(job["result_path"]).write_text(json.dumps({
-            "answer": answer, "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost},
+            "answer": answer, "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cache_read_tokens": cache_read_tokens, "cost_usd": cost},
             "scenario_latency_seconds": scenario_latency_seconds,
         }), encoding="utf-8")
     finally:
@@ -403,8 +405,11 @@ from types import SimpleNamespace
 from openai import OpenAI
 
 payload = json.load(sys.stdin)
-usage = {"input_tokens": 0, "output_tokens": 0}
+usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0}
 lock = threading.Lock()
+
+def usage_value(value, name):
+    return value.get(name, 0) if isinstance(value, dict) else getattr(value, name, 0)
 
 class Judge:
     def __init__(self):
@@ -413,8 +418,11 @@ class Judge:
         messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else list(prompt)
         reply = self.client.chat.completions.create(model=payload["model"], messages=messages, seed=payload["seed"], service_tier=payload["service_tier"], max_tokens=payload["max_output_tokens"])
         with lock:
-            usage["input_tokens"] += int(getattr(reply.usage, "prompt_tokens", 0) or 0)
-            usage["output_tokens"] += int(getattr(reply.usage, "completion_tokens", 0) or 0)
+            prompt_tokens = int(usage_value(reply.usage, "prompt_tokens") or 0)
+            cache_read_tokens = int(usage_value(usage_value(reply.usage, "prompt_tokens_details"), "cached_tokens") or 0)
+            usage["input_tokens"] += max(0, prompt_tokens - cache_read_tokens)
+            usage["output_tokens"] += int(usage_value(reply.usage, "completion_tokens") or 0)
+            usage["cache_read_tokens"] += cache_read_tokens
         return SimpleNamespace(content=reply.choices[0].message.content or "")
 
 judge = Judge()
@@ -449,10 +457,11 @@ def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], 
         raise LiveRunError(f"pinned {item.benchmark} judge returned an invalid result")
     input_tokens = int(usage.get("input_tokens", 0) or 0)
     output_tokens = int(usage.get("output_tokens", 0) or 0)
-    if input_tokens < 0 or output_tokens < 0:
+    cache_read_tokens = int(usage.get("cache_read_tokens", 0) or 0)
+    if input_tokens < 0 or output_tokens < 0 or cache_read_tokens < 0:
         raise LiveRunError(f"pinned {item.benchmark} judge returned invalid usage")
-    cost = input_tokens * float(manifest["input_price_per_token"]) + output_tokens * float(manifest["output_price_per_token"])
-    return {"score": float(result["score"]), "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost}}
+    cost = input_tokens * float(manifest["input_price_per_token"]) + output_tokens * float(manifest["output_price_per_token"]) + cache_read_tokens * float(manifest["cache_read_price_per_token"])
+    return {"score": float(result["score"]), "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cache_read_tokens": cache_read_tokens, "cost_usd": cost}}
 
 
 def run_live_evaluation(
@@ -507,8 +516,8 @@ def run_live_evaluation(
         job_path = job_root / "job.json"
         job_path.write_text(json.dumps({
             "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
-            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"],
-            "input_price_per_token": manifest["input_price_per_token"], "output_price_per_token": manifest["output_price_per_token"],
+            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
+            "input_price_per_token": manifest["input_price_per_token"], "output_price_per_token": manifest["output_price_per_token"], "cache_read_price_per_token": manifest["cache_read_price_per_token"],
             "history": item.history, "probe": item.public_probe, "runtime_home": str(job_root / "home"),
             "credential_home": str(credential_home), "result_path": str(result_path),
         }), encoding="utf-8")

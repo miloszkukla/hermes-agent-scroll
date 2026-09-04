@@ -29,8 +29,10 @@ def _manifest():
         "max_output_tokens": 25,
         "input_token_budget": 100,
         "output_token_budget": 50,
+        "cache_read_token_budget": 100,
         "input_price_per_token": 0.000001,
         "output_price_per_token": 0.000002,
+        "cache_read_price_per_token": 0.0000001,
         "cost_ceiling_usd": 1.5,
         "source_revisions": {"source": "locked"},
         "licenses": {"source": "MIT"},
@@ -66,6 +68,8 @@ def test_live_manifest_requires_a_frozen_symmetric_credential_free_shape():
         validate_live_manifest({**_manifest(), "service_tier": "unfrozen"})
     with pytest.raises(LiveManifestError, match="budgets"):
         validate_live_manifest({**_manifest(), "max_output_tokens": 0})
+    with pytest.raises(LiveManifestError, match="budgets"):
+        validate_live_manifest({**_manifest(), "cache_read_token_budget": 0})
 
 
 def test_live_manifest_template_is_not_live_evaluation_authorization():
