@@ -10167,7 +10167,8 @@ def _call_llm_impl(
                                 ),
                             ),
                         ),
-                        task)
+                        task,
+                        provider=request_provider, base_url=_base_info)
                 except Exception as retry_transient:
                     if not _is_transient_transport_error(retry_transient):
                         raise
@@ -10922,7 +10923,8 @@ async def _async_call_llm_impl(
                     api_mode=resolved_api_mode,
                     create=_acreate,
                 ),
-                task)
+                task,
+                provider=request_provider, base_url=_client_base)
     except Exception as first_err:
         if "temperature" in kwargs and _is_unsupported_temperature_error(first_err):
             retry_kwargs = dict(kwargs)

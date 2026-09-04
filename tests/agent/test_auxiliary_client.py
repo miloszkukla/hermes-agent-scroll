@@ -2095,6 +2095,44 @@ class TestTransientTransportRetry:
         assert client.chat.completions.create.call_count == 1
 
 
+    def test_same_provider_retry_preserves_auxiliary_accounting_route(self):
+        client = MagicMock()
+        client.base_url = "https://openrouter.ai/api/v1"
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
+            model="some-model", usage=SimpleNamespace(prompt_tokens=3, completion_tokens=2),
+        )
+        client.chat.completions.create.side_effect = [RuntimeError("dropped connection"), response]
+        p1, p2, _ = self._patches(client)
+        with (
+            p1, p2,
+            patch("agent.auxiliary_client._is_transient_transport_error", return_value=True),
+            patch("agent.aux_accounting.record_aux_usage") as record_usage,
+            patch("agent.auxiliary_client.time.sleep"),
+        ):
+            assert call_llm(task="compression", messages=[{"role": "user", "content": "hi"}]) is response
+        record_usage.assert_called_once_with(response, "compression", provider="openrouter", base_url="https://openrouter.ai/api/v1")
+
+
+    @pytest.mark.asyncio
+    async def test_async_same_provider_retry_preserves_auxiliary_accounting_route(self):
+        client = MagicMock()
+        client.base_url = "https://openrouter.ai/api/v1"
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))],
+            model="some-model", usage=SimpleNamespace(prompt_tokens=3, completion_tokens=2),
+        )
+        client.chat.completions.create = AsyncMock(side_effect=[RuntimeError("dropped connection"), response])
+        p1, p2, _ = self._patches(client)
+        with (
+            p1, p2,
+            patch("agent.auxiliary_client._is_transient_transport_error", return_value=True),
+            patch("agent.aux_accounting.record_aux_usage") as record_usage,
+        ):
+            assert await async_call_llm(task="compression", messages=[{"role": "user", "content": "hi"}]) is response
+        record_usage.assert_called_once_with(response, "compression", provider="openrouter", base_url="https://openrouter.ai/api/v1")
+
+
     def test_compression_skips_same_provider_retry_on_timeout(self):
         """A timeout on the critical compression path must NOT retry the same
         provider (that doubles the user-visible stall, issue #54465) — it
