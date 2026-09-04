@@ -81,14 +81,18 @@ def _sha256(path: Path) -> str:
         raise LiveRunError(f"could not hash required artifact {path}") from exc
 
 
-def _git_output(args: list[str], failure: str) -> str:
+def _command_output(args: list[str], failure: str, *, cwd: Path | None = None) -> str:
     try:
-        return subprocess.run(args, check=True, capture_output=True, text=True, timeout=30).stdout.strip()
+        return subprocess.run(args, check=True, capture_output=True, text=True, timeout=30, cwd=cwd).stdout.strip()
     except (OSError, subprocess.SubprocessError) as exc:
         raise LiveRunError(failure) from exc
 
 
-def _require_clean_git_checkout(path: Path, label: str) -> None:
+def _git_output(args: list[str], failure: str) -> str:
+    return _command_output(args, failure)
+
+
+def _require_clean_git_checkout(path: Path, label: str, *, allow_untracked: bool = True) -> None:
     commands = (
         ["git", "-C", str(path), "diff", "--quiet"],
         ["git", "-C", str(path), "diff", "--cached", "--quiet"],
@@ -100,6 +104,8 @@ def _require_clean_git_checkout(path: Path, label: str) -> None:
             raise LiveRunError(f"{label} checkout has tracked changes") from exc
         except (OSError, subprocess.SubprocessError) as exc:
             raise LiveRunError(f"could not verify {label} checkout cleanliness") from exc
+    if not allow_untracked and _git_output(["git", "-C", str(path), "ls-files", "--others", "--exclude-standard"], f"could not verify {label} checkout cleanliness"):
+        raise LiveRunError(f"{label} checkout has untracked files")
 
 
 def verify_manifest_provenance(manifest: Mapping[str, Any], repository_root: Path) -> None:
@@ -446,13 +452,14 @@ def run_live_evaluation(
     source_commit = _git_output(["git", "-C", str(scroll_source), "rev-parse", "HEAD"], "could not verify pinned Scroll source revision")
     if source_commit != manifest["source_revisions"].get("scroll"):
         raise LiveRunError("pinned Scroll source revision does not match the live manifest")
-    _require_clean_git_checkout(scroll_source, "pinned Scroll source")
+    _require_clean_git_checkout(scroll_source, "pinned Scroll source", allow_untracked=False)
     source_python = scroll_source / ".venv" / "bin" / "python"
     if not source_python.is_file():
         raise LiveRunError("pinned Scroll evaluation environment is unavailable")
-    source_module = _git_output(
+    source_module = _command_output(
         [str(source_python), "-c", "import scroll_eval; from pathlib import Path; print(Path(scroll_eval.__file__).resolve())"],
         "pinned Scroll evaluation environment cannot import scroll_eval",
+        cwd=scroll_source,
     )
     try:
         Path(source_module).resolve().relative_to((scroll_source / "evaluation" / "scroll_eval").resolve())
