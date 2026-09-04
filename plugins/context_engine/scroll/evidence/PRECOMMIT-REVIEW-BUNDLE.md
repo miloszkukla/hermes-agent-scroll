@@ -12,13 +12,13 @@ or virtual environment is included.
 Captured on 2026-09-04 against Hermes base
 `29112bef099274229cadff79cdff7bf7b99c4b77` (`v2026.8.31`) on branch
 `codex/scroll-plugin`, candidate
-`c17b49e79c31632802433800eb46d4b17463449c`.
+`6fc652d37c78d0c598cb11b11de12bfe2359ea3b`.
 
 | Material | SHA-256 |
 | --- | --- |
-| Complete candidate diff from base (`git diff --binary base..candidate`) | `968458b539ed4067756365b3c4289d972f3595aed390f399c546519c89a73451` |
-| Memory live manifest | `2946a1c850768e9095e0031aa5f3c12939acd96343c5304a32eb63100d8da310` |
-| Coding live manifest | `78fabb4ed5dfbc1d463d7970385a1cf10e5f854a2cd4acc719334e70165c27b7` |
+| Complete candidate diff from base (`git diff --binary base..candidate`) | `58161d14b166fa8abff1952d5d3d26f682d44f9474f4cec2daf8d63a46c65607` |
+| Memory live manifest | `ebc2ec7fc6cb3c139a5196e3aa83e72132e926bb553b2fed61cfcf0620c8f113` |
+| Coding live manifest | `bde905f095791bfcd412641f1e4d495acd860a958b8a4e948cea8adb6c38de2b` |
 | Plan | `7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210` |
 | Credential-free manifest | `b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e` |
 | Stage 0 report | `295aacf7cbadcd197d5b82bd70b6a4d5edb27049099735302acb9541413dc7d3` |
@@ -49,7 +49,7 @@ candidate and both manifests. It found no actionable P0/P1/P2 after verifying
 the host `_compress_context` lifecycle, valid OpenAI tool-call replay shape,
 100K-token histories, paired bootstrap/p95 accounting, dirty/untracked source
 rejection, LongMemEval corpus hashing, and source-CWD `scroll_eval` imports.
-The disposition is recorded in [FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md](FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md), whose transport amendment records the explicit Chat Completions fix in this candidate.
+The disposition is recorded in [FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md](FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md), whose amendments record the explicit Chat Completions, terminal-isolation, and auxiliary-output-cap fixes in this candidate.
 
 The task owner authorized the two OpenRouter-backed live lanes and delivery
 commits/pushes. The checkpoint precedes all live-model requests.

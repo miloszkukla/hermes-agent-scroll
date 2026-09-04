@@ -5,11 +5,14 @@
 **GO for the two frozen live lanes only.** The exact implementation candidate,
 credential-free manifests, source and corpus pins, and independent fresh review
 below are complete. The task owner authorized the OpenRouter credential in
-`/home/codex/.hermes/.env` on 2026-09-04. One initial stock worker reached its
+`/home/codex/.hermes/.env` on 2026-09-04. The first stock worker reached its
 auxiliary compression call but failed before the agent turn because Hermes chose
-the incompatible Codex Responses transport for the frozen seed. Its ignored raw
-trace is excluded from evaluation; the reviewed replacement candidate below
-forces OpenRouter Chat Completions and has no accepted paired result yet.
+the incompatible Codex Responses transport for the frozen seed. A subsequent
+Chat Completions retry completed one coding worker, but its output exceeded the
+then-undersized aggregate cap and its terminal task CWD was not isolated. Both
+incomplete traces are excluded; the reviewed replacement candidate below forces
+Chat Completions, registers the task workspace, and has no accepted paired
+result yet.
 
 ## Frozen inputs at this checkpoint
 
@@ -21,9 +24,9 @@ forces OpenRouter Chat Completions and has no accepted paired result yet.
 | Credential-free manifest SHA-256 | `b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e` |
 | Stage 0 report SHA-256 | `295aacf7cbadcd197d5b82bd70b6a4d5edb27049099735302acb9541413dc7d3` |
 | Evaluation advisory SHA-256 | `f4fe4183547b18a411e54d2e6c5c9d3b5e7f6ae87f96cd747a499953de0e7939` |
-| Implementation commit | `c17b49e79c31632802433800eb46d4b17463449c` |
-| Memory live-manifest SHA-256 | `2946a1c850768e9095e0031aa5f3c12939acd96343c5304a32eb63100d8da310` |
-| Coding live-manifest SHA-256 | `78fabb4ed5dfbc1d463d7970385a1cf10e5f854a2cd4acc719334e70165c27b7` |
+| Implementation commit | `6fc652d37c78d0c598cb11b11de12bfe2359ea3b` |
+| Memory live-manifest SHA-256 | `ebc2ec7fc6cb3c139a5196e3aa83e72132e926bb553b2fed61cfcf0620c8f113` |
+| Coding live-manifest SHA-256 | `bde905f095791bfcd412641f1e4d495acd860a958b8a4e948cea8adb6c38de2b` |
 | Memory/coding cost ceilings | `$15.00` / `$25.00` |
 
 ## Passing credential-free evidence
@@ -85,7 +88,11 @@ forces OpenRouter Chat Completions and has no accepted paired result yet.
   imports. See [FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md](FRESH-LIVE-EXECUTOR-REVIEW-2026-09-04.md).
 - The transport amendment was independently reviewed with no actionable
   P0/P1/P2 on `c17b49e79c31632802433800eb46d4b17463449c`; both arms now
-  explicitly use seeded OpenRouter Chat Completions.
+  explicitly use seeded OpenRouter Chat Completions. Its terminal-isolation
+  follow-up was independently reviewed with no actionable P0/P1/P2 on
+  `6fc652d37c78d0c598cb11b11de12bfe2359ea3b`: each coding task now registers
+  its workspace with the task ID, and the aggregate output cap is 65,536 tokens
+  while each auxiliary call retains its 4,096-token cap.
 
 ## Completed gate items and execution limits
 

@@ -60,3 +60,20 @@ and seed values without constructing a provider client.
 Independent reviewer `/root/final_fresh_review` rechecked the amendment:
 **GO preserved; no actionable P0/P1/P2.** Its focused suite passed 18 tests,
 and the expanded main focused matrix passed 83 tests across 14 files.
+
+## Coding-worker isolation amendment
+
+Candidate: `6fc652d37c78d0c598cb11b11de12bfe2359ea3b`.
+
+The first corrected coding worker completed but the driver excluded it because
+the aggregate output exceeded the then-fixed 32,768-token limit. It also showed
+that the worker had not registered the coding workspace under its task ID. The
+replacement candidate keeps each auxiliary compression call at 4,096 tokens,
+raises the aggregate coding-output allowance to 65,536 tokens, registers the
+per-task terminal CWD before the conversation, and clears that override in a
+`finally` block. The incomplete worker trace remains excluded and no accepted
+paired result exists yet.
+
+Independent reviewer `/root/final_fresh_review` rechecked this amendment:
+**GO preserved; no actionable P0/P1/P2.** Its focused suite passed 19 tests,
+and the expanded main focused matrix passed 84 tests across 14 files.
