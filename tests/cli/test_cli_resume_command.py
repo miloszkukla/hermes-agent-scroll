@@ -264,3 +264,25 @@ class TestResumeFlushesBeforeEndSession:
             conversation_history=[{"role": "user", "content": "hello"}, {"role": "assistant", "content": "hi"}],
         )
         cli_obj._session_db.end_session.assert_called_once()
+
+    def test_resume_runs_full_context_lifecycle_and_publishes_snapshot(self):
+        cli_obj = _make_cli()
+        previous_history = [{"role": "user", "content": "old session"}]
+        restored = [{"role": "user", "content": "target session"}]
+        cli_obj.conversation_history = previous_history
+        agent = MagicMock()
+        cli_obj.agent = agent
+        cli_obj._session_db.get_session.return_value = {"id": "target", "title": "T"}
+        cli_obj._session_db.get_resume_conversations.return_value = (restored, restored)
+        cli_obj._session_db.resolve_resume_session_id.return_value = "target"
+
+        with (
+            patch("hermes_cli.main._resolve_session_by_name_or_id", return_value="target"),
+            patch("cli._cprint"),
+        ):
+            cli_obj._handle_resume_command("/resume target")
+
+        agent.reset_session_state.assert_called_once_with(
+            previous_messages=previous_history, old_session_id="current_session",
+        )
+        agent._publish_canonical_history_snapshot.assert_called_once_with()

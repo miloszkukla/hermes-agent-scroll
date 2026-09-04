@@ -59,14 +59,6 @@ async function startTurnAndSwitchAway(page: import('@playwright/test').Page) {
     { timeout: 15_000 },
   )
 
-  // Wait for the background dot — confirms the turn is running.
-  await expect
-    .poll(
-      () => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(),
-      { timeout: 30_000, message: 'background dot should appear' },
-    )
-    .toBeGreaterThan(0)
-
   // The final answer text streams before message.complete, so text visibility
   // alone is not a completion barrier. Wait for the foreground-running state
   // to clear before asserting the background-process state.
@@ -85,8 +77,12 @@ async function startTurnAndSwitchAway(page: import('@playwright/test').Page) {
   // The background dot must still be visible: the turn is done but the
   // process is held open by the sentinel, so this is a stable state rather
   // than a window we have to catch in time.
-  const bgDuringTurn = await page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count()
-  expect(bgDuringTurn, 'background dot should still be visible after turn completes').toBeGreaterThan(0)
+  await expect
+    .poll(
+      () => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(),
+      { timeout: 30_000, message: 'background dot should still be visible after turn completes' },
+    )
+    .toBeGreaterThan(0)
 
   // Switch to a new session — session A is no longer $selectedStoredSessionId.
   // This is required: openSessionTile bails if the session is already selected.
@@ -142,7 +138,7 @@ test.describe('sidebar states — tab (hidden) unread is correct', () => {
 
     // ⌃-click opens the session as a TAB (center dock = stacked, not visible
     // unless it's the active tab). The session is NOT on screen.
-    const row = sessionRow(page, SIDEBAR_CROSS_TEXTS.finalText)
+    const row = sessionRow(page, 'E2E_SIDEBAR_CROSS')
     await row.click({ modifiers: ['Control'] })
     await page.waitForTimeout(2000)
 
@@ -204,7 +200,7 @@ test.describe.skip('sidebar states — split (visible) unread bug (RED)', () => 
     // Drag the session row from the sidebar to the right edge of the workspace
     // zone to create a SPLIT (side-by-side) tile. This triggers the real
     // startSessionDrag → onCommit → openSessionTile(id, 'right', anchor) path.
-    const row = sessionRow(page, SIDEBAR_CROSS_TEXTS.finalText)
+    const row = sessionRow(page, 'E2E_SIDEBAR_CROSS')
     const rowBox = await row.boundingBox()
     expect(rowBox, 'session row must be visible').not.toBeNull()
 

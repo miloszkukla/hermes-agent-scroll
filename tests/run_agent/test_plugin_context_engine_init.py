@@ -7,6 +7,7 @@ context_length, causing the CLI status bar to show 'ctx --'.
 from unittest.mock import MagicMock, patch
 
 from agent.context_engine import ContextEngine
+from hermes_state import SessionDB
 
 
 class _StubEngine(ContextEngine):
@@ -37,6 +38,17 @@ class _ToolEngine(_StubEngine):
         ]
 
 
+class _SnapshotEngine(_StubEngine):
+    uses_canonical_history_snapshots = True
+
+    def __init__(self):
+        super().__init__()
+        self.snapshots = []
+
+    def on_canonical_history_snapshot(self, snapshot):
+        self.snapshots.append(snapshot)
+
+
 def test_plugin_engine_gets_context_length_on_init():
     """Plugin context engine should have context_length set during AIAgent init."""
     engine = _StubEngine()
@@ -65,6 +77,48 @@ def test_plugin_engine_gets_context_length_on_init():
     assert agent.context_compressor is engine
     assert engine.context_length == 204_800
     assert engine.threshold_tokens == int(204_800 * engine.threshold_percent)
+
+
+def test_resumed_snapshot_engine_receives_history_before_its_first_turn(tmp_path):
+    engine = _SnapshotEngine()
+    db = SessionDB(tmp_path / "state.db")
+    db.create_session("resumed", source="test")
+    db.append_message("resumed", "user", "persisted recall target")
+    cfg = {"context": {"engine": "stub"}, "agent": {}}
+
+    with (
+        patch("hermes_cli.config.load_config", return_value=cfg), patch("hermes_cli.config.load_config_readonly", return_value=cfg),
+        patch("plugins.context_engine.load_context_engine", return_value=engine),
+        patch("agent.model_metadata.get_model_context_length", return_value=204_800),
+        patch("run_agent.get_tool_definitions", return_value=[]),
+        patch("run_agent.check_toolset_requirements", return_value={}),
+        patch("run_agent.OpenAI"),
+    ):
+        from run_agent import AIAgent
+
+        AIAgent(api_key="test-key-1234567890", base_url="https://openrouter.ai/api/v1", session_id="resumed", session_db=db, quiet_mode=True, skip_context_files=True, skip_memory=True)
+
+    assert [[row.text for row in snapshot.rows] for snapshot in engine.snapshots] == [["persisted recall target"]]
+
+
+def test_new_snapshot_engine_waits_for_its_durable_session_row(tmp_path):
+    engine = _SnapshotEngine()
+    db = SessionDB(tmp_path / "state.db")
+    cfg = {"context": {"engine": "stub"}, "agent": {}}
+
+    with (
+        patch("hermes_cli.config.load_config", return_value=cfg), patch("hermes_cli.config.load_config_readonly", return_value=cfg),
+        patch("plugins.context_engine.load_context_engine", return_value=engine),
+        patch("agent.model_metadata.get_model_context_length", return_value=204_800),
+        patch("run_agent.get_tool_definitions", return_value=[]),
+        patch("run_agent.check_toolset_requirements", return_value={}),
+        patch("run_agent.OpenAI"),
+    ):
+        from run_agent import AIAgent
+
+        AIAgent(api_key="test-key-1234567890", base_url="https://openrouter.ai/api/v1", session_id="new", session_db=db, quiet_mode=True, skip_context_files=True, skip_memory=True)
+
+    assert engine.snapshots == []
 
 
 def test_active_context_engine_tools_survive_explicit_platform_toolsets():
@@ -208,5 +262,3 @@ def test_codex_gpt55_autoraise_still_applies_to_builtin_compressor():
     assert agent.context_compressor.threshold_percent == 0.85
     # Gateway parity: the notice is stashed for replay on turn 1.
     assert agent._compression_warning and "85%" in agent._compression_warning
-
-

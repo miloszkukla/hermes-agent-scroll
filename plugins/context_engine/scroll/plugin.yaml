@@ -1,0 +1,3 @@
+name: scroll
+description: Sandboxed Scroll long-context recall through one Monty-only REPL tool.
+version: 0.1.0

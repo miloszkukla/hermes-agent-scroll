@@ -4,6 +4,7 @@ import sqlite3
 import time
 import json
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -813,19 +814,25 @@ class TestFTS5Search:
         ]
         assert all("context" in row and row["context"] for row in default)
 
-    def test_search_projection_skips_context_enrichment_queries(self, db):
+    def test_search_projection_skips_context_enrichment_queries(self, db, monkeypatch):
         db.create_session(session_id="s1", source="cli")
         db.append_message("s1", role="user", content="before")
         db.append_message("s1", role="assistant", content="projectionneedle")
         db.append_message("s1", role="user", content="after")
 
         statements = []
-        read_conn = db._get_read_conn() or db._conn
-        traced_connections = [db._conn]
-        if read_conn is not db._conn:
-            traced_connections.append(read_conn)
-        for conn in traced_connections:
-            conn.set_trace_callback(statements.append)
+        traced_connections = []
+        original_read_ctx = db._read_ctx
+
+        @contextmanager
+        def traced_read_ctx():
+            with original_read_ctx() as conn:
+                if conn not in traced_connections:
+                    conn.set_trace_callback(statements.append)
+                    traced_connections.append(conn)
+                yield conn
+
+        monkeypatch.setattr(db, "_read_ctx", traced_read_ctx)
 
         def context_query_count():
             normalized = (" ".join(sql.upper().split()) for sql in statements)
@@ -4711,6 +4718,33 @@ class TestDisplayMetadataPersistence:
         reloaded = db.get_messages_as_conversation("s1")
         assert reloaded[0]["display_kind"] == "async_delegation_complete"
         assert reloaded[0]["display_metadata"] == meta
+
+    def test_record_tool_steer_preserves_clean_display_content_and_api_history(self, db):
+        db.create_session("s1", source="cli")
+        db.append_message("s1", "tool", "command output", tool_call_id="call-1")
+
+        assert db.record_tool_steer("s1", "call-1", "command output\n\n[marker]", "continue")
+
+        message = db.get_messages_as_conversation("s1")[0]
+        assert message["content"] == "command output"
+        assert message["api_content"] == "command output\n\n[marker]"
+        assert message["display_metadata"] == {"steer_corrections": ["continue"]}
+
+    def test_pending_tool_steer_moves_from_call_to_result(self, db):
+        db.create_session("s1", source="cli")
+        db.append_message("s1", "assistant", "", tool_calls=[{"id": "call-1", "function": {"name": "terminal", "arguments": "{}"}}])
+
+        assert db.record_pending_tool_steer("s1", "continue")
+        assert db.get_messages_as_conversation("s1")[0]["display_metadata"] == {"steer_corrections": ["continue"]}
+
+        db.append_message("s1", "tool", "command output", tool_call_id="call-1")
+        assert db.record_tool_steer("s1", "call-1", "command output\n\n[marker]", "continue")
+
+        assistant, tool = db.get_messages_as_conversation("s1")
+        assert assistant.get("display_metadata") is None
+        assert tool["content"] == "command output"
+        assert tool["api_content"] == "command output\n\n[marker]"
+        assert tool["display_metadata"] == {"steer_corrections": ["continue"]}
 
 
 

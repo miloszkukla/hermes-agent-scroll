@@ -44,6 +44,17 @@ def test_commit_memory_session_notifies_context_engine():
     ctx.on_session_end.assert_called_once_with("sess-42", msgs)
 
 
+def test_compression_memory_commit_preserves_context_engine_state():
+    mm = MagicMock()
+    ctx = MagicMock()
+    agent = _make_minimal_agent(mm, ctx, session_id="sess-42")
+
+    msgs = [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "yo"}]
+    agent.commit_memory_session(msgs, notify_context_engine_end=False)
+
+    mm.on_session_end.assert_called_once_with(msgs)
+    ctx.on_session_end.assert_not_called()
+
 
 
 

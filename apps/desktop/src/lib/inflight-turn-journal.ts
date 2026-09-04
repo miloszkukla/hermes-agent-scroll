@@ -54,6 +54,7 @@ export interface InFlightTurnSnapshot {
 export interface JournalableSessionState {
   awaitingResponse: boolean
   busy: boolean
+  interimBoundaryPending?: boolean
   messages: ChatMessage[]
   storedSessionId: null | string
   streamId: null | string
@@ -569,11 +570,7 @@ function recoverableTail(messages: ChatMessage[], streamId: null | string): Chat
     for (let index = visible.length - 1; index >= 0; index -= 1) {
       const message = visible[index]
 
-      if (message.role === 'user') {
-        break
-      }
-
-      if (assistantHasRecoverableContent(message)) {
+      if (assistantHasRecoverableContent(message) && (isLiveProjectionRow(message) || message.interim)) {
         assistantIndex = index
 
         break
@@ -588,19 +585,27 @@ function recoverableTail(messages: ChatMessage[], streamId: null | string): Chat
   let start = assistantIndex
 
   for (let index = assistantIndex - 1; index >= 0; index -= 1) {
-    if (visible[index].role === 'user') {
+    const message = visible[index]
+
+    if (message.role === 'assistant') {
       start = index
 
-      // A mid-turn redirect inserts its correction as another user row right
-      // before the live reply, so the turn can open with a RUN of user rows.
-      // Keep walking back over them: stopping at the nearest one journals the
-      // correction alone and loses the prompt that actually started the turn.
-      while (start > 0 && visible[start - 1].role === 'user') {
-        start -= 1
+      continue
+    }
+
+    if (message.role === 'user') {
+      start = index
+
+      const previous = visible[index - 1]
+
+      if (previous?.role === 'user' || (previous?.role === 'assistant' && (isLiveProjectionRow(previous) || previous.interim))) {
+        continue
       }
 
       break
     }
+
+    break
   }
 
   return visible.slice(start)
@@ -631,6 +636,23 @@ function assistantTextLength(message: ChatMessage): number {
  */
 function hasStructuralParts(message: ChatMessage): boolean {
   return message.parts.some(part => part.type === 'reasoning' || part.type === 'tool-call')
+}
+
+/** A durable row may contain progress already represented by the local live
+ * tail (for example, the assistant's pre-tool text). While the backend still
+ * reports that turn as running, that is not proof of a terminal reply. */
+function assistantProgressMatches(left: ChatMessage, right: ChatMessage): boolean {
+  const leftText = normalizedText(chatMessageText(left))
+  const rightText = normalizedText(chatMessageText(right))
+
+  if (leftText.length > 0 && leftText === rightText) {
+    return true
+  }
+
+  const leftTools = left.parts.filter(part => part.type === 'tool-call').map(part => part.toolName)
+  const rightTools = right.parts.filter(part => part.type === 'tool-call').map(part => part.toolName)
+
+  return leftTools.length > 0 && leftTools.some(toolName => rightTools.includes(toolName))
 }
 
 function overlayProjectionRow(projection: ChatMessage, journalRow: ChatMessage): ChatMessage {
@@ -743,6 +765,7 @@ export function mergeInFlightMessages(
   const tailAssistants = tail.slice(tailUserIndex + 1)
   const lastJournalRow = tailAssistants.findLast(assistantHasRecoverableContent) ?? null
   const matchingUserIndex = tailUser ? baseMessages.findLastIndex(message => userMessagesMatch(message, tailUser)) : -1
+  const trailingCorrection = tail.at(-1)?.role === 'user' && tail.slice(0, -1).some(assistantHasRecoverableContent)
 
   if (matchingUserIndex < 0) {
     // No base user matches the tail's user row (a projected user-inflight row
@@ -772,9 +795,9 @@ export function mergeInFlightMessages(
 
   const afterUser = baseMessages.slice(matchingUserIndex + 1)
 
-  const completedReply = afterUser.find(
-    message => assistantHasRecoverableContent(message) && !isLiveProjectionRow(message)
-  )
+  const completedReply = trailingCorrection
+    ? undefined
+    : afterUser.find(message => assistantHasRecoverableContent(message) && !isLiveProjectionRow(message))
 
   if (completedReply) {
     // The transcript already holds this turn's committed reply — the journal
@@ -782,7 +805,13 @@ export function mergeInFlightMessages(
     return { ...noop, caughtUp: true }
   }
 
-  const projectionIndex = baseMessages.findIndex(
+  const projectionIndex = trailingCorrection ? baseMessages.findLastIndex(
+    (message, index) =>
+      index > matchingUserIndex &&
+      message.role === 'assistant' &&
+      (isLiveProjectionRow(message) ||
+        tailAssistants.some(tailAssistant => assistantProgressMatches(message, tailAssistant)))
+  ) : baseMessages.findIndex(
     (message, index) => index > matchingUserIndex && message.role === 'assistant' && isLiveProjectionRow(message)
   )
 
@@ -812,14 +841,30 @@ export function mergeInFlightMessages(
   const projection = baseMessages[projectionIndex]
   const merged = lastJournalRow ? overlayProjectionRow(projection, lastJournalRow) : projection
 
-  const sealedRows = tailAssistants.filter(
-    message => message !== lastJournalRow && assistantHasRecoverableContent(message)
-  )
+  const recoveredTail = trailingCorrection
+    ? tail.slice(tailUserIndex + 1).flatMap(message => {
+        if (message === lastJournalRow) {
+          return [merged]
+        }
+
+        if (message.role === 'user' && baseMessages.some(candidate => userMessagesMatch(candidate, message))) {
+          return []
+        }
+
+        if (message.role === 'assistant' && baseMessages.some(candidate => assistantProgressMatches(candidate, message))) {
+          return []
+        }
+
+        return message.role !== 'assistant' || assistantHasRecoverableContent(message) ? [message] : []
+      })
+    : [
+        ...tailAssistants.filter(message => message !== lastJournalRow && assistantHasRecoverableContent(message)),
+        merged
+      ]
 
   const messages = [
     ...baseMessages.slice(0, projectionIndex),
-    ...sealedRows,
-    merged,
+    ...recoveredTail,
     ...baseMessages.slice(projectionIndex + 1)
   ]
 
@@ -876,6 +921,22 @@ function writeSnapshot(storedSessionId: string, state: JournalableSessionState):
     return
   }
 
+  const previous = readRaw(store, key)
+  const previousSnapshot = previous ? parseSnapshot(previous) : null
+  const trailingCorrection = previousSnapshot?.messages.at(-1)
+
+  // A background activation can report an older live projection after the
+  // user has steered. Keep that correction-bearing snapshot until the newer
+  // projection represents it; otherwise its trailing write erases the only
+  // renderer-side copy before the backend's durable sidecar arrives.
+  if (
+    trailingCorrection?.role === 'user' &&
+    previousSnapshot?.messages.slice(0, -1).some(assistantHasRecoverableContent) &&
+    !messages.some(message => userMessagesMatch(message, trailingCorrection))
+  ) {
+    return
+  }
+
   const raw = serializeSnapshot({
     messages,
     streamId: state.streamId,
@@ -926,6 +987,24 @@ export function persistInFlightTurnState(state: JournalableSessionState): void {
 
   if (!state.busy && !state.awaitingResponse && !state.streamId) {
     clearInFlightTurnJournal(storedSessionId)
+
+    return
+  }
+
+  // A correction seals the live assistant and appends a user bubble at the
+  // tail. Persist that boundary synchronously: a session switch can evict its
+  // warm cache before the normal 400ms trailing write runs, and recovery has
+  // no later event that would rediscover the correction.
+  if (state.interimBoundaryPending && state.messages.at(-1)?.role === 'user') {
+    const timer = persistTimers.get(storedSessionId)
+
+    if (timer) {
+      clearTimeout(timer)
+      persistTimers.delete(storedSessionId)
+    }
+
+    persistLatest.delete(storedSessionId)
+    writeSnapshot(storedSessionId, state)
 
     return
   }

@@ -87,6 +87,26 @@ describe('toChatMessages', () => {
     expect((toolPart as { args: { command?: string } }).args.command).toBe(longCommand)
   })
 
+  it('rehydrates a structured tool error projected without raw output', () => {
+    const [message] = toChatMessages([
+      {
+        role: 'tool',
+        name: 'scroll_repl',
+        content: '',
+        args: { source: 'print(pre_restart_value)' },
+        error: 'RECALL FAILED: NameError: pre_restart_value is not defined',
+        timestamp: 2
+      }
+    ])
+    const [part] = message.parts
+
+    expect(part).toMatchObject({
+      type: 'tool-call',
+      isError: true,
+      result: { error: 'RECALL FAILED: NameError: pre_restart_value is not defined' }
+    })
+  })
+
   it('keeps a turn with interleaved tool-only rows in a single bubble', () => {
     const messages = toChatMessages([
       { role: 'assistant', content: 'Planning.', timestamp: 1 },
@@ -163,7 +183,9 @@ describe('toChatMessages', () => {
     expect(assistantMessages[0].parts.filter(part => part.type === 'tool-call').map(part => part.completedAt)).toEqual([
       3, 5
     ])
-    expect(assistantMessages[0].parts.filter(part => part.type === 'tool-call')).toHaveLength(2)
+    const toolParts = assistantMessages[0].parts.filter(part => part.type === 'tool-call')
+    expect(toolParts).toHaveLength(2)
+    expect(toolParts.map(part => part.isError)).toEqual([true, false])
     expect(chatMessageText(assistantMessages[0])).toContain("Let me also check if there's a top-level lint workflow.")
     expect(chatMessageText(assistantMessages[0])).toContain('Now let me check git status and commit.')
   })
@@ -364,6 +386,37 @@ describe('toChatMessages', () => {
       expect(chatMessageText(message)).not.toContain('Visible response before the interruption')
       expect(chatMessageText(message)).not.toContain('Context from the interrupted assistant response')
     }
+  })
+
+  it('projects a durable steer correction from assistant or tool metadata', () => {
+    const assistantCorrection = toChatMessages([
+      { role: 'user', content: 'original prompt', timestamp: 1 },
+      {
+        role: 'assistant',
+        content: 'Checking the task.',
+        display_metadata: { steer_corrections: ['use the corrected task'] },
+        timestamp: 2
+      }
+    ])
+    const toolCorrection = toChatMessages([
+      {
+        role: 'assistant',
+        content: '',
+        timestamp: 1,
+        tool_calls: [{ id: 'tc-1', function: { name: 'terminal', arguments: '{}' } }]
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'tc-1',
+        tool_name: 'terminal',
+        content: 'ok',
+        display_metadata: JSON.stringify({ steer_corrections: ['use the corrected task'] }),
+        timestamp: 2
+      }
+    ])
+
+    expect(assistantCorrection.map(chatMessageText)).toEqual(['original prompt', 'Checking the task.', 'use the corrected task'])
+    expect(toolCorrection.map(chatMessageText)).toEqual(['', 'use the corrected task'])
   })
 
   it('projects persisted composite compaction carriers to their live user turn', () => {
@@ -737,6 +790,16 @@ describe('upsertToolPart', () => {
     const withTool = upsertToolPart(text, { name: 'read_file', tool_id: 'call-2' }, 'running', 21)
 
     expect(withTool[0].completedAt).toBe(21)
+  })
+
+  it('marks a structured tool error failed when a legacy gateway omits its outer error field', () => {
+    const [part] = upsertToolPart(
+      [],
+      { name: 'scroll_repl', result: { error: 'time limit exceeded' }, tool_id: 'scroll-timeout' },
+      'complete'
+    )
+
+    expect(part && 'isError' in part ? part.isError : undefined).toBe(true)
   })
 
   it('closes active commentary when only a tool completion arrives', () => {

@@ -6819,6 +6819,13 @@ def _apply_live_compression_config(agent: Any, cfg: dict | None) -> None:
     cc = getattr(agent, "context_compressor", None)
     if cc is None:
         return
+    from agent.context_compressor import ContextCompressor
+
+    # External context engines own their compaction policy.  The construction
+    # path applies compression.* only to ContextCompressor; applying it here
+    # to every engine can overwrite engine-defined retention boundaries.
+    if not isinstance(cc, ContextCompressor):
+        return
 
     # tail_mode: ctor normalization — unknown/absent values land on "lean",
     # matching agent_init's default and the compressor's own fallback.
@@ -7935,6 +7942,18 @@ def _on_tool_complete(sid: str, tool_call_id: str, name: str, args: dict, result
         payload["result"] = json.loads(result)
     except Exception:
         payload["result"] = result
+    structured_error = payload["result"].get("error") if isinstance(payload["result"], dict) else None
+    if isinstance(structured_error, str) and structured_error.strip():
+        payload["error"] = structured_error
+    else:
+        try:
+            from agent.display import _detect_tool_failure
+
+            failed, _ = _detect_tool_failure(name, result)
+        except Exception:
+            failed = False
+        if failed:
+            payload["error"] = _tool_result_text(result)
     summary = _tool_summary(name, result, duration_s)
     if summary:
         payload["summary"] = summary
@@ -9638,7 +9657,13 @@ def _history_to_messages(history: list[dict]) -> list[dict]:
                     except (json.JSONDecodeError, TypeError):
                         args = {}
                     tool_call_args[tc_id] = (fn["name"], args)
+            metadata = m.get("display_metadata")
+            corrections = metadata.get("steer_corrections") if isinstance(metadata, dict) else None
             if not content_text.strip():
+                if isinstance(corrections, list):
+                    for correction in corrections:
+                        if isinstance(correction, str) and correction.strip():
+                            messages.append({"role": "user", "text": correction.strip(), "timestamp": m.get("timestamp")})
                 continue
         if role == "tool":
             tc_id = m.get("tool_call_id", "")
@@ -9653,7 +9678,23 @@ def _history_to_messages(history: list[dict]) -> list[dict]:
             # truncation was permanent.
             if args:
                 tool_msg["args"] = args
+            # Keep explicit structured failures available after resume without
+            # exposing arbitrary (potentially sensitive) tool output. The live
+            # tool.complete event already sends this same field to the desktop.
+            try:
+                result = json.loads(m.get("content", ""))
+            except (json.JSONDecodeError, TypeError):
+                result = None
+            error = result.get("error") if isinstance(result, dict) else None
+            if isinstance(error, str) and error.strip():
+                tool_msg["error"] = error
             messages.append(tool_msg)
+            metadata = m.get("display_metadata")
+            corrections = metadata.get("steer_corrections") if isinstance(metadata, dict) else None
+            if isinstance(corrections, list):
+                for correction in corrections:
+                    if isinstance(correction, str) and correction.strip():
+                        messages.append({"role": "user", "text": correction.strip(), "timestamp": m.get("timestamp")})
             continue
         # An assistant turn may carry only reasoning/thinking content with no
         # visible text (extended-thinking turns, thinking-only recovery
@@ -9707,6 +9748,13 @@ def _history_to_messages(history: list[dict]) -> list[dict]:
         if m.get("display_metadata"):
             msg["display_metadata"] = m["display_metadata"]
         messages.append(msg)
+        if role == "assistant":
+            metadata = m.get("display_metadata")
+            corrections = metadata.get("steer_corrections") if isinstance(metadata, dict) else None
+            if isinstance(corrections, list):
+                for correction in corrections:
+                    if isinstance(correction, str) and correction.strip():
+                        messages.append({"role": "user", "text": correction.strip(), "timestamp": m.get("timestamp")})
 
     return messages
 

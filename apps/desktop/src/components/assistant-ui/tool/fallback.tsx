@@ -436,7 +436,7 @@ function ToolEntry({ part }: ToolEntryProps) {
     const summaryDuplicatesSubtitle = summary && summary.toLowerCase() === subtitleNorm
 
     if (summaryDuplicatesSubtitle) {
-      return { body: rest.join('\n\n').trim(), summary: '' }
+      return { body: rest.join('\n\n').trim(), summary }
     }
 
     return { body: rest.join('\n\n').trim(), summary }

@@ -1064,6 +1064,21 @@ context:
   engine: "lcm"          # must match the plugin's name
 ```
 
+Scroll is the bundled sandboxed long-context engine. It exposes exactly one
+tool, `scroll_repl`, and requires the project's locked Linux CPython 3.12
+environment plus the `scroll` optional dependency group:
+
+```yaml
+context:
+  engine: "scroll"
+```
+
+`scroll_repl` runs only in the Monty sandbox. It can search and expand the
+host-redacted canonical history through `ms`, but it cannot read files,
+environment variables, network, processes, the Hermes database, or a shell.
+If the locked Monty runtime is unavailable, Scroll exposes no fallback Python
+or terminal surface.
+
 Plugin engines are **never auto-activated** — you must explicitly set `context.engine` to the plugin name. Available engines can be browsed and selected via `hermes plugins` → Provider Plugins → Context Engine.
 
 See [Memory Providers](/user-guide/features/memory-providers) for the analogous single-select system for memory plugins.

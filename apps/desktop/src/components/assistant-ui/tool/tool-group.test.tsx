@@ -619,6 +619,21 @@ describe('flat tool list approval surfacing', () => {
     })
   })
 
+  it('keeps a sole error diagnostic expandable', async () => {
+    const { container } = render(<GroupHarness message={failedOnlyMessage()} />)
+
+    const errorTool = container.querySelector('[data-tool-row] button[aria-expanded="false"]')
+    expect(errorTool).not.toBeNull()
+
+    fireEvent.click(errorTool as Element)
+
+    await waitFor(() => {
+      const open = container.querySelector('[data-tool-open]')
+      expect(open).not.toBeNull()
+      expect(open?.textContent).toContain('boom')
+    })
+  })
+
   it('does not show dismiss for pending tool rows', async () => {
     const { container } = render(<GroupHarness message={pendingOnlyMessage()} />)
 

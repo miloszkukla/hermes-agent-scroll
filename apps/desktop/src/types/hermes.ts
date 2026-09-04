@@ -555,6 +555,7 @@ export type TimelineDisplayMetadata =
       duration_seconds?: number
     }
   | { reactions: MessageReaction[] }
+  | { steer_corrections: string[] }
 
 /** One emoji reaction on a message. One per author, iOS-Tapback style. */
 export interface MessageReaction {
@@ -576,6 +577,8 @@ export interface SessionMessage {
   /** Backend-projected user-visible content when a physical row also carries internal model scaffolding. */
   display_content?: unknown
   context?: unknown
+  /** Structured tool failure projected by current gateways without raw output. */
+  error?: string
   name?: string
   reasoning?: null | string
   reasoning_content?: null | string

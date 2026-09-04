@@ -26,7 +26,8 @@ Lifecycle:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 from agent.redact import redact_sensitive_text
 
@@ -35,6 +36,55 @@ MEMORY_CONTEXT_MAX_CHARS = 6_000
 _MEMORY_CONTEXT_HEAD_CHARS = 4_000
 _MEMORY_CONTEXT_TAIL_CHARS = 1_500
 _MEMORY_CONTEXT_TRUNCATION_MARKER = "\n...[memory provider context truncated]...\n"
+
+
+@dataclass(frozen=True)
+class CanonicalHistoryToolCall:
+    """Redacted, immutable tool-call metadata in a history snapshot."""
+
+    name: str
+    call_id: Optional[str]
+    arguments_digest: Optional[str]
+
+
+@dataclass(frozen=True)
+class CanonicalHistoryRow:
+    """One recall-eligible, host-projected row of canonical history.
+
+    ``_row_id`` is scoped to ``generation``. Consumers must discard it after a
+    newer snapshot is observed because compaction can replace durable rows.
+    """
+
+    _row_id: int
+    generation: int
+    order_key: Tuple[int, int]
+    session_id: str
+    role: str
+    text: str
+    content_reference: Optional[str]
+    tool_name: Optional[str]
+    tool_call_id: Optional[str]
+    tool_calls: Tuple[CanonicalHistoryToolCall, ...]
+    correlation: Tuple[Tuple[str, str], ...]
+    timestamp: Optional[float]
+    sensitivity: str
+    fidelity: str
+    is_compressed_summary: bool
+
+
+@dataclass(frozen=True)
+class CanonicalHistorySnapshot:
+    """Immutable, transactionally consistent canonical-history projection.
+
+    The host creates snapshots; context-engine plugins receive only these
+    value objects, never a SessionDB, connection, filesystem path, or callback
+    capable of reaching storage directly.
+    """
+
+    lineage_id: str
+    generation: int
+    high_water_mark: int
+    rows: Tuple[CanonicalHistoryRow, ...]
 
 
 def sanitize_memory_context(memory_context: str) -> str:
@@ -127,6 +177,11 @@ class ContextEngine(ABC):
     # maintenance can set this false to keep successful automatic passes silent;
     # warnings, errors, and explicit manual commands should still surface.
     emit_automatic_compaction_status: bool = True
+
+    # Engines that opt in receive a host-materialized, immutable history
+    # snapshot after durable writes and committed compaction boundaries. This
+    # intentionally supplies values, never persistence capabilities.
+    uses_canonical_history_snapshots: bool = False
 
     # -- Core interface ----------------------------------------------------
 
@@ -407,6 +462,14 @@ class ContextEngine(ABC):
         self.last_completion_tokens = 0
         self.last_total_tokens = 0
         self.compression_count = 0
+
+    def on_canonical_history_snapshot(self, snapshot: CanonicalHistorySnapshot) -> None:
+        """Receive a host-owned immutable canonical history projection.
+
+        Only engines with ``uses_canonical_history_snapshots`` set receive this
+        callback. It must be fast and retain no storage capability; expensive
+        cache reconciliation belongs to the engine's later selection path.
+        """
 
     # -- Optional: tools ---------------------------------------------------
 

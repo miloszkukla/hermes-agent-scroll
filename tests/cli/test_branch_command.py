@@ -146,6 +146,21 @@ class TestBranchCommandCLI:
         assert kwargs["reset"] is False
         assert kwargs["reason"] == "branch"
 
+    def test_branch_runs_full_context_lifecycle_and_publishes_snapshot(self, cli_instance, session_db):
+        from cli import HermesCLI
+
+        agent = MagicMock()
+        cli_instance.agent = agent
+        parent_session_id = cli_instance.session_id
+        history = cli_instance.conversation_history
+
+        HermesCLI._handle_branch_command(cli_instance, "/branch")
+
+        agent.reset_session_state.assert_called_once_with(
+            previous_messages=history, old_session_id=parent_session_id,
+        )
+        agent._publish_canonical_history_snapshot.assert_called_once_with()
+
 
 
 class TestBranchCommandDef:

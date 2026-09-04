@@ -91,6 +91,14 @@ function messageReactions(metadata: SessionMessage['display_metadata']): Message
   )
 }
 
+function steerCorrections(metadata: SessionMessage['display_metadata']): string[] {
+  const corrections = parseDisplayMetadata(metadata)?.steer_corrections
+
+  return Array.isArray(corrections)
+    ? corrections.filter((correction): correction is string => typeof correction === 'string' && correction.trim().length > 0)
+    : []
+}
+
 function timelineDisplayContent(message: SessionMessage, content: string): string {
   if (message.display_kind === 'model_switch') {
     return 'model changed'
@@ -132,6 +140,21 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
     return timestamps.length ? Math.min(...timestamps) : undefined
   }
 
+  const appendSteerCorrections = (corrections: string[], timestamp: number | undefined, index: number) => {
+    corrections.forEach((correction, correctionIndex) => {
+      result.push({
+        id: `${timestamp || Date.now()}-${index}-steer-correction-${correctionIndex}`,
+        role: 'user',
+        parts: [textPart(correction.trim(), timestamp)],
+        timestamp
+      })
+    })
+
+    if (corrections.length) {
+      activeAssistantIndex = null
+    }
+  }
+
   const appendPartsToActiveAssistant = (parts: ChatMessagePart[], timestamp?: number): boolean => {
     if (activeAssistantIndex === null) {
       return false
@@ -171,20 +194,33 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
 
   messages.forEach((message, index) => {
     if (message.role === 'tool') {
+      const corrections = steerCorrections(message.display_metadata)
       const updatedPendingToolParts = applyStoredToolResultToParts(pendingToolParts, message)
 
       if (updatedPendingToolParts) {
         pendingToolParts = updatedPendingToolParts
 
+        if (corrections.length) {
+          flushPendingTools(index)
+          appendSteerCorrections(corrections, message.timestamp, index)
+        }
+
         return
       }
 
       if (applyStoredToolResult(result, message)) {
+        appendSteerCorrections(corrections, message.timestamp, index)
+
         return
       }
 
       pendingToolParts = [...pendingToolParts, storedToolMessagePart(message, index)]
       pendingToolTimestamp ??= message.timestamp
+
+      if (corrections.length) {
+        flushPendingTools(index)
+        appendSteerCorrections(corrections, message.timestamp, index)
+      }
 
       return
     }
@@ -310,6 +346,7 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
     })
 
     activeAssistantIndex = message.role === 'assistant' ? result.length - 1 : null
+    appendSteerCorrections(steerCorrections(message.display_metadata), message.timestamp, index)
   })
   flushPendingTools(messages.length)
 

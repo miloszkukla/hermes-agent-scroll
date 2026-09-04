@@ -49,6 +49,23 @@ class TestSteerAcceptance:
         assert agent.steer("go ahead and check the logs") is True
         assert agent._pending_steer == "go ahead and check the logs"
 
+    def test_persists_pending_tool_steer_for_warm_resume(self):
+        class _SessionDB:
+            def __init__(self):
+                self.calls = []
+
+            def record_pending_tool_steer(self, *args):
+                self.calls.append(args)
+                return True
+
+        agent = _bare_agent()
+        agent._executing_tools = True
+        agent.session_id = "session-1"
+        agent._session_db = _SessionDB()
+
+        assert agent.steer("keep the failure output") is True
+        assert agent._session_db.calls == [("session-1", "keep the failure output")]
+
 
 
 
@@ -501,8 +518,30 @@ class TestSteerInjection:
         assert "ls output B" in messages[3]["content"]
         assert STEER_MARKER_OPEN in messages[3]["content"]
         assert "please also check auth.log" in messages[3]["content"]
+        assert messages[3]["display_metadata"] == {"steer_corrections": ["please also check auth.log"]}
         # And pending_steer is consumed.
         assert agent._pending_steer is None
+
+    def test_persists_marker_as_tool_api_content_and_correction_as_display_metadata(self):
+        class _SessionDB:
+            def __init__(self):
+                self.calls = []
+
+            def record_tool_steer(self, *args):
+                self.calls.append(args)
+                return True
+
+        agent = _bare_agent()
+        agent.session_id = "session-1"
+        agent._session_db = _SessionDB()
+        agent.steer("keep the failure output")
+        messages = [{"role": "tool", "content": "pytest output", "tool_call_id": "call-1"}]
+
+        agent._apply_pending_steer_to_tool_results(messages, num_tool_msgs=1)
+
+        assert agent._session_db.calls == [
+            ("session-1", "call-1", messages[0]["content"], "keep the failure output")
+        ]
 
     def test_no_op_when_no_steer_pending(self):
         agent = _bare_agent()

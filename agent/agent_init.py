@@ -2984,6 +2984,14 @@ def init_agent(
                 context_length=getattr(agent.context_compressor, "context_length", 0),
                 conversation_id=getattr(agent, "_gateway_session_key", None),
             )
+            db = getattr(agent, "_session_db", None)
+            has_resumed_history = bool(
+                db and agent.session_id and callable(getattr(db, "get_session", None))
+                and db.get_session(agent.session_id) is not None
+            )
+            publish_snapshot = getattr(agent, "_publish_canonical_history_snapshot", None)
+            if has_resumed_history and callable(publish_snapshot):
+                publish_snapshot()
         except Exception as _ce_err:
             _ra().logger.debug("Context engine on_session_start: %s", _ce_err)
 

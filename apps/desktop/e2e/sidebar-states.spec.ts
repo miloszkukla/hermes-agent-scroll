@@ -113,25 +113,30 @@ test.describe('sidebar states — background process and subagent', () => {
 })
 
 // ────────────────────────────────────────────────────────────────────────
-// Test 2: subagent running shows background dot too (longer bg process)
+// Test 2: held background process shows after the parent turn
 // ────────────────────────────────────────────────────────────────────────
 
-test.describe('sidebar states — subagent and background dot coexist', () => {
+test.describe('sidebar states — background dot after the parent turn', () => {
   test.describe.configure({ mode: 'serial' })
 
   let fixture: MockBackendFixture
+  const bgRelease = createBackgroundReleaseHandle()
 
   test.beforeAll(async () => {
     restartMockServer()
-    fixture = await setupMockBackend()
+    fixture = await setupMockBackend({
+      mockServer: { backgroundReleasePath: bgRelease.path },
+    })
     await waitForAppReady(fixture, 120_000)
   })
 
   test.afterAll(async () => {
+    bgRelease.release()
     await fixture?.cleanup()
+    bgRelease.cleanup()
   })
 
-  test('background dot visible while subagent runs', async () => {
+  test('background dot appears after the parent turn completes', async () => {
     const page = fixture.page
 
     // Start the turn but DON'T wait for the final answer yet — we want
@@ -149,26 +154,31 @@ test.describe('sidebar states — subagent and background dot coexist', () => {
       { timeout: 15_000 },
     )
 
-    // The background process (sleep 5) should show a "Background task
-    // running" dot while the subagent is also running.
-    await expect
-      .poll(
-        () => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(),
-        { timeout: 30_000, message: 'background dot should appear while subagent runs' },
-      )
-      .toBeGreaterThan(0)
-
-    // Evidence: the background dot is visible while the subagent runs.
-    await page.screenshot({ path: 'test-results/bg-dot-while-subagent-runs.png' })
-
-    // Now wait for the final answer to appear.
+    // A foreground turn has priority over the background dot. Wait for it to
+    // finish, then assert the sentinel-held process owns the sidebar status.
     await page.waitForFunction(
       (text) => (document.body.textContent ?? '').includes(text),
       SIDEBAR_CROSS_TEXTS.finalText,
       { timeout: 90_000 },
     )
+    await expect
+      .poll(
+        () => page.locator(`[aria-label="${SESSION_RUNNING_DOT_LABEL}"]`).count(),
+        { timeout: 30_000, message: 'session running dot should disappear after turn completes' },
+      )
+      .toBe(0)
 
-    // After the turn + auto-dismiss, the background dot should be gone.
+    await expect
+      .poll(
+        () => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(),
+        { timeout: 30_000, message: 'background dot should appear after the parent turn completes' },
+      )
+      .toBeGreaterThan(0)
+
+    // Evidence: the held process owns the sidebar status after the turn.
+    await page.screenshot({ path: 'test-results/bg-dot-after-parent-turn.png' })
+
+    bgRelease.release()
     await page.waitForTimeout(8000)
     const bgCount = await page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count()
     expect(bgCount, 'background dot should be gone after process exits').toBe(0)
@@ -213,14 +223,6 @@ test.describe('sidebar states — cross-session dot transition', () => {
     await composer.type('E2E_SIDEBAR_CROSS', { delay: 20 })
     await page.keyboard.press('Enter')
 
-    // Wait for the background dot to appear.
-    await expect
-      .poll(
-        () => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(),
-        { timeout: 30_000, message: 'background dot should appear' },
-      )
-      .toBeGreaterThan(0)
-
     // The final answer text streams before message.complete, so text visibility
     // alone is not a completion barrier. Wait for the foreground-running state
     // to clear before asserting the background-process state.
@@ -239,8 +241,12 @@ test.describe('sidebar states — cross-session dot transition', () => {
     // The background dot must still be visible: the turn is done but the
     // process is held open by the sentinel, so this is a stable state rather
     // than a window we have to catch in time.
-    const bgDuringTurn = await page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count()
-    expect(bgDuringTurn, 'background dot should still be visible after turn completes').toBeGreaterThan(0)
+    await expect
+      .poll(
+        () => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(),
+        { timeout: 30_000, message: 'background dot should still be visible after turn completes' },
+      )
+      .toBeGreaterThan(0)
 
     // Evidence: bg dot visible on session A while its turn is done but the
     // background process hasn't exited yet.

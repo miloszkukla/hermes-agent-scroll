@@ -649,6 +649,30 @@ describe('recoverInFlightTurnJournal', () => {
     expect(merged.parts[1]).toMatchObject({ type: 'text', text: 'partial' })
   })
 
+  it('keeps a correction after durable tool progress while the turn is still running', () => {
+    journalEntry([
+      user('u1', 'do the thing'),
+      assistant('assistant-stream-thought', 'checking', { interim: true }),
+      assistantWithTool('assistant-stream-tool', '', { interim: true }),
+      user('u2', 'use the correction')
+    ])
+
+    const base = [
+      user('db-u1', 'do the thing'),
+      assistant('db-thought', 'checking'),
+      assistantWithTool('db-tool', '')
+    ]
+    const result = recoverInFlightTurnJournal('stored-1', base, { keepPending: true })
+
+    expect(result.applied).toBe(true)
+    expect(result.messages.map(message => message.id)).toEqual(['db-u1', 'db-thought', 'db-tool', 'u2'])
+
+    const staleCacheResult = recoverInFlightTurnJournal('stored-1', base, { keepPending: false })
+
+    expect(staleCacheResult.applied).toBe(true)
+    expect(staleCacheResult.messages.map(message => message.id)).toEqual(['db-u1', 'db-thought', 'db-tool', 'u2'])
+  })
+
   it('keeps the journal text when it is longer than the projection text', () => {
     journalEntry([
       user('u1', 'do the thing'),
@@ -789,6 +813,59 @@ describe('mid-turn redirect corrections', () => {
     ])
   })
 
+  it('persists a correction boundary without waiting for the stream throttle', () => {
+    persistInFlightTurnState({
+      awaitingResponse: false,
+      busy: true,
+      interimBoundaryPending: true,
+      messages: [
+        user('user-1', 'remove the session counts'),
+        assistant('assistant-stream-1', 'Checking.', { interim: true }),
+        user('user-2', 'hurry up')
+      ],
+      storedSessionId: 'stored-redirect',
+      streamId: null,
+      turnStartedAt: Date.now()
+    })
+
+    expect(readInFlightTurnJournal('stored-redirect')?.messages.map(message => message.id)).toEqual([
+      'user-1', 'assistant-stream-1', 'user-2'
+    ])
+  })
+
+  it('does not overwrite a correction boundary with an older live projection', () => {
+    persistInFlightTurnState({
+      awaitingResponse: false,
+      busy: true,
+      interimBoundaryPending: true,
+      messages: [
+        user('user-1', 'remove the session counts'),
+        assistant('assistant-stream-1', 'Checking.', { interim: true }),
+        user('user-2', 'hurry up')
+      ],
+      storedSessionId: 'stored-redirect',
+      streamId: null,
+      turnStartedAt: Date.now()
+    })
+
+    persistInFlightTurnState({
+      awaitingResponse: false,
+      busy: true,
+      messages: [
+        user('user-1', 'remove the session counts'),
+        assistant('assistant-stream-1', 'Checking.', { pending: true })
+      ],
+      storedSessionId: 'stored-redirect',
+      streamId: 'assistant-stream-1',
+      turnStartedAt: Date.now()
+    })
+    vi.advanceTimersByTime(400)
+
+    expect(readInFlightTurnJournal('stored-redirect')?.messages.map(message => message.id)).toEqual([
+      'user-1', 'assistant-stream-1', 'user-2'
+    ])
+  })
+
   it('still stops at an assistant boundary so prior turns are not journaled', () => {
     persistInFlightTurnState({
       awaitingResponse: false,
@@ -808,5 +885,21 @@ describe('mid-turn redirect corrections', () => {
     const journaled = readInFlightTurnJournal('stored-boundary')?.messages ?? []
 
     expect(journaled.map(message => message.id)).toEqual(['user-1', 'assistant-stream-1'])
+  })
+
+  it('keeps a correction that follows the projected live assistant', () => {
+    const result = mergeInFlightMessages(
+      [user('db-user', 'the original prompt'), assistant('assistant-stream-live', 'checking', { pending: true })],
+      [
+        user('user-original', 'the original prompt'),
+        assistant('assistant-stream-old', 'checking', { interim: true }),
+        user('user-correction', 'use the corrected task')
+      ],
+      { keepPending: true }
+    )
+
+    expect(result.messages.map(message => message.id)).toEqual([
+      'db-user', 'assistant-stream-live', 'user-correction'
+    ])
   })
 })

@@ -34,7 +34,13 @@ from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
 
+from agent.context_engine import (
+    CanonicalHistoryRow,
+    CanonicalHistorySnapshot,
+    CanonicalHistoryToolCall,
+)
 from agent.memory_manager import sanitize_context
+from agent.redact import redact_sensitive_text
 from agent.session_activity import ActivityProvenance
 from agent.message_sanitization import _sanitize_surrogates
 # Intrinsic persistence marker stamped on message dicts that are known-durable
@@ -7551,6 +7557,10 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                     )
             if not messages:
                 raise RuntimeError("Compression child handoff must not be empty")
+            child_model_config = dict(model_config or {})
+            child_model_config[self._CANONICAL_HISTORY_GENERATION_KEY] = (
+                self._canonical_history_lineage_generation(conn, parent_session_id) + 1
+            )
             system_prompt_hash = self._store_system_prompt(conn, system_prompt)
 
             conn.execute(
@@ -7565,7 +7575,7 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                     child_session_id,
                     source,
                     model,
-                    json.dumps(model_config) if model_config else None,
+                    json.dumps(child_model_config),
                     system_prompt_hash,
                     parent_session_id,
                     cwd or parent["cwd"],
@@ -11797,6 +11807,81 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
         return bool(self._execute_write(_do))
 
+    def record_tool_steer(
+        self, session_id: str, tool_call_id: str, api_content: str, correction: str,
+    ) -> bool:
+        """Persist a delivered steer without exposing its marker in the transcript."""
+        if not session_id or not tool_call_id or not api_content or not correction:
+            return False
+
+        def _do(conn):
+            row = conn.execute(
+                "SELECT id, display_metadata FROM messages WHERE session_id = ? "
+                "AND role = 'tool' AND tool_call_id = ? AND active = 1 "
+                "ORDER BY id DESC LIMIT 1",
+                (session_id, tool_call_id),
+            ).fetchone()
+            if row is None:
+                return False
+            metadata = self._decode_display_metadata(row["display_metadata"]) or {}
+            corrections = metadata.get("steer_corrections")
+            if not isinstance(corrections, list):
+                corrections = []
+            source = conn.execute(
+                "SELECT id, display_metadata FROM messages WHERE session_id = ? "
+                "AND role = 'assistant' AND tool_calls IS NOT NULL AND id < ? AND active = 1 "
+                "ORDER BY id DESC LIMIT 1",
+                (session_id, row["id"]),
+            ).fetchone()
+            source_metadata = self._decode_display_metadata(source["display_metadata"]) if source else None
+            source_corrections = source_metadata.get("steer_corrections") if isinstance(source_metadata, dict) else None
+            moved = [item for item in source_corrections if isinstance(item, str) and item.strip()] if isinstance(source_corrections, list) else []
+            metadata["steer_corrections"] = [
+                *[item for item in corrections if isinstance(item, str) and item.strip()], *(moved or [correction])
+            ]
+            conn.execute(
+                "UPDATE messages SET api_content = ?, display_metadata = ? WHERE id = ?",
+                (_scrub_surrogates(api_content), self._encode_display_metadata(metadata), row["id"]),
+            )
+            if source and isinstance(source_metadata, dict) and moved:
+                source_metadata.pop("steer_corrections", None)
+                conn.execute(
+                    "UPDATE messages SET display_metadata = ? WHERE id = ?",
+                    (self._encode_display_metadata(source_metadata), source["id"]),
+                )
+            return True
+
+        return bool(self._execute_write(_do))
+
+    def record_pending_tool_steer(self, session_id: str, correction: str) -> bool:
+        """Keep a tool-time steer visible while its tool result is not yet durable."""
+        if not session_id or not correction:
+            return False
+
+        def _do(conn):
+            row = conn.execute(
+                "SELECT id, display_metadata FROM messages WHERE session_id = ? "
+                "AND role = 'assistant' AND tool_calls IS NOT NULL AND active = 1 "
+                "ORDER BY id DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            metadata = self._decode_display_metadata(row["display_metadata"]) or {}
+            corrections = metadata.get("steer_corrections")
+            if not isinstance(corrections, list):
+                corrections = []
+            metadata["steer_corrections"] = [
+                *[item for item in corrections if isinstance(item, str) and item.strip()], correction
+            ]
+            conn.execute(
+                "UPDATE messages SET display_metadata = ? WHERE id = ?",
+                (self._encode_display_metadata(metadata), row["id"]),
+            )
+            return True
+
+        return bool(self._execute_write(_do))
+
     #: Key under which message reactions live inside ``display_metadata``.
     #: Reactions share the existing per-message JSON column rather than a side
     #: table so they survive rewind/compaction row rewrites with the row itself.
@@ -12232,6 +12317,197 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             ).fetchone()
         return int(row[0]) if row else 0
 
+    @staticmethod
+    def _canonical_history_content(value: Any, encoded_value: Any) -> Tuple[str, Optional[str], str, str]:
+        """Return a redacted public history projection without artifact bytes."""
+        fidelity = "text"
+        content_reference = None
+        if isinstance(value, str):
+            text = value
+        else:
+            fidelity = "degraded"
+            text_parts: List[str] = []
+
+            def _collect_text(part: Any) -> None:
+                if isinstance(part, list):
+                    for item in part:
+                        _collect_text(item)
+                elif isinstance(part, dict):
+                    kind = str(part.get("type", "")).lower()
+                    if kind in {"text", "input_text", "output_text"}:
+                        for key in ("text", "content"):
+                            candidate = part.get(key)
+                            if isinstance(candidate, str):
+                                text_parts.append(candidate)
+                                break
+                    elif kind in {"image_url", "input_image", "audio", "input_audio", "file", "input_file"}:
+                        return
+
+            _collect_text(value)
+            text = "\n".join(text_parts) or "[non-text content omitted]"
+            raw_reference = encoded_value if isinstance(encoded_value, str) else repr(encoded_value)
+            content_reference = "sha256:" + hashlib.sha256(
+                raw_reference.encode("utf-8", errors="replace")
+            ).hexdigest()
+        redacted = redact_sensitive_text(
+            sanitize_context(text).strip(), force=True, redact_url_credentials=True,
+        )
+        sensitivity = "redacted" if redacted != text else "normal"
+        return redacted, content_reference, sensitivity, fidelity
+
+    @staticmethod
+    def _canonical_history_tool_calls(raw: Any) -> Tuple[CanonicalHistoryToolCall, ...]:
+        """Normalize tool calls to immutable metadata; never expose arguments."""
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except (json.JSONDecodeError, TypeError):
+            parsed = []
+        if not isinstance(parsed, list):
+            return ()
+        calls = []
+        for call in parsed:
+            if not isinstance(call, dict):
+                continue
+            function = call.get("function")
+            function = function if isinstance(function, dict) else {}
+            name = function.get("name") or call.get("name")
+            if not isinstance(name, str) or not name:
+                continue
+            call_id = call.get("id") or call.get("call_id")
+            call_id = str(call_id) if call_id is not None else None
+            arguments = function.get("arguments", call.get("arguments"))
+            arguments_digest = None
+            if arguments is not None:
+                try:
+                    encoded = json.dumps(arguments, sort_keys=True, separators=(",", ":"), default=str)
+                except (TypeError, ValueError):
+                    encoded = repr(arguments)
+                arguments_digest = "sha256:" + hashlib.sha256(
+                    encoded.encode("utf-8", errors="replace")
+                ).hexdigest()
+            calls.append(CanonicalHistoryToolCall(name, call_id, arguments_digest))
+        return tuple(calls)
+
+    _CANONICAL_HISTORY_GENERATION_KEY = "_canonical_history_generation"
+
+    @staticmethod
+    def _canonical_history_generation(model_config: Any) -> int:
+        """Read the private compaction epoch from tolerant session metadata."""
+        if isinstance(model_config, str):
+            try:
+                model_config = json.loads(model_config)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                model_config = {}
+        value = model_config.get(SessionDB._CANONICAL_HISTORY_GENERATION_KEY, 0) if isinstance(model_config, dict) else 0
+        return value if isinstance(value, int) and value >= 0 else 0
+
+    def _canonical_history_lineage_generation(self, conn, session_id: str) -> int:
+        rows = conn.execute(
+            """WITH RECURSIVE lineage(id, parent_session_id, model_config, depth) AS (
+                   SELECT id, parent_session_id, model_config, 0 FROM sessions WHERE id = ?
+                   UNION ALL
+                   SELECT s.id, s.parent_session_id, s.model_config, lineage.depth + 1
+                   FROM sessions AS s JOIN lineage ON s.id = lineage.parent_session_id
+                   WHERE lineage.depth < 99
+               ) SELECT model_config FROM lineage""",
+            (session_id,),
+        ).fetchall()
+        return max((self._canonical_history_generation(row["model_config"]) for row in rows), default=0)
+
+    def get_canonical_history_snapshot(self, session_id: str) -> CanonicalHistorySnapshot:
+        """Materialize a safe, immutable, lineage-aware history snapshot.
+
+        The complete read runs inside one explicit transaction, so every value
+        in the returned snapshot refers to one SQLite point in time. Only active
+        rows and compacted rows retained for recall are projected; rewound and
+        deleted rows never leave this method. The generation advances only at
+        committed compaction boundaries, where row identities can be replaced.
+        """
+        if not session_id:
+            return CanonicalHistorySnapshot("", 0, 0, ())
+        with self._read_ctx() as conn:
+            conn.execute("BEGIN")
+            try:
+                ancestry = conn.execute(
+                    """WITH RECURSIVE lineage(id, parent_session_id, model_config, depth) AS (
+                           SELECT id, parent_session_id, model_config, 0
+                           FROM sessions WHERE id = ?
+                           UNION ALL
+                           SELECT s.id, s.parent_session_id, s.model_config, lineage.depth + 1
+                           FROM sessions AS s JOIN lineage ON s.id = lineage.parent_session_id
+                           WHERE lineage.depth < 99
+                       )
+                       SELECT id, model_config, depth FROM lineage ORDER BY depth DESC""",
+                    (session_id,),
+                ).fetchall()
+                if not ancestry:
+                    return CanonicalHistorySnapshot(session_id, 0, 0, ())
+                target_config = ancestry[-1]["model_config"]
+                try:
+                    is_explicit_branch = bool(json.loads(target_config or "{}").get("_branched_from"))
+                except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+                    is_explicit_branch = False
+                session_ids = [session_id] if is_explicit_branch else [row["id"] for row in ancestry]
+                lineage_id = session_ids[0]
+                placeholders = ",".join("?" for _ in session_ids)
+                high_water_row = conn.execute(
+                    f"SELECT COALESCE(MAX(id), 0) AS high_water_mark FROM messages WHERE session_id IN ({placeholders})",
+                    session_ids,
+                ).fetchone()
+                high_water_mark = int(high_water_row["high_water_mark"] or 0)
+                generation = max((self._canonical_history_generation(row["model_config"]) for row in ancestry), default=0)
+                raw_rows = conn.execute(
+                    f"""SELECT id, session_id, role, content, tool_call_id, tool_calls, tool_name,
+                               effect_disposition, finish_reason, platform_message_id, observed,
+                               _compressed_summary, timestamp, active, compacted
+                        FROM messages WHERE session_id IN ({placeholders})
+                          AND (active = 1 OR compacted = 1) ORDER BY id ASC""",
+                    session_ids,
+                ).fetchall()
+            finally:
+                if conn.in_transaction:
+                    conn.execute("ROLLBACK")
+
+        # A carried tail may exist under multiple durable ids after compaction.
+        # Match the display projection's deterministic live-then-newest choice
+        # before constructing public generation-scoped identities.
+        deduped: Dict[Tuple[Any, ...], Any] = {}
+        for row in raw_rows:
+            key = (
+                row["role"], row["content"], row["timestamp"], row["tool_call_id"],
+                row["tool_calls"], row["tool_name"],
+            )
+            current = deduped.get(key)
+            if current is None or (row["active"], row["id"]) > (current["active"], current["id"]):
+                deduped[key] = row
+        rows = []
+        for row in sorted(deduped.values(), key=lambda item: item["id"]):
+            content = self._decode_content(row["content"])
+            text, content_reference, sensitivity, fidelity = self._canonical_history_content(content, row["content"])
+            correlation = []
+            for key, value in (
+                ("platform_message_id", row["platform_message_id"]),
+                ("effect_disposition", row["effect_disposition"]),
+                ("finish_reason", row["finish_reason"]),
+            ):
+                if value is not None:
+                    correlation.append((key, redact_sensitive_text(str(value), force=True, redact_url_credentials=True)))
+            if row["observed"]:
+                correlation.append(("observed", "true"))
+            rows.append(CanonicalHistoryRow(
+                _row_id=int(row["id"]), generation=generation,
+                order_key=(generation, int(row["id"])), session_id=str(row["session_id"]),
+                role=str(row["role"]), text=text, content_reference=content_reference,
+                tool_name=str(row["tool_name"]) if row["tool_name"] is not None else None,
+                tool_call_id=str(row["tool_call_id"]) if row["tool_call_id"] is not None else None,
+                tool_calls=self._canonical_history_tool_calls(row["tool_calls"]),
+                correlation=tuple(correlation),
+                timestamp=float(row["timestamp"]) if row["timestamp"] is not None else None,
+                sensitivity=sensitivity, fidelity=fidelity,
+                is_compressed_summary=bool(row["_compressed_summary"]),
+            ))
+        return CanonicalHistorySnapshot(lineage_id, generation, high_water_mark, tuple(rows))
+
     def archive_and_compact(
         self,
         session_id: str,
@@ -12314,15 +12590,16 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
                         "commit; refusing to publish a stale compaction"
                     )
 
-            patched_model_config = None
-            if model_config_patch is not None:
-                # on_missing="raise": a prune/compaction must not commit
-                # against a vanished session row (the compressor's caller
-                # converts the raised error into a safe keep-the-original
-                # no-op), unlike the flag setters which tolerate missing rows.
-                patched_model_config = self._merge_model_config_json(
-                    conn, session_id, model_config_patch, on_missing="raise"
-                )
+            # A committed compaction is the only boundary that can replace
+            # canonical rows. Advance its durable epoch in this same write
+            # transaction so a post-commit snapshot never accepts old handles.
+            generation_patch = dict(model_config_patch or {})
+            generation_patch[self._CANONICAL_HISTORY_GENERATION_KEY] = (
+                self._canonical_history_lineage_generation(conn, session_id) + 1
+            )
+            patched_model_config = self._merge_model_config_json(
+                conn, session_id, generation_patch, on_missing="raise"
+            )
 
             # Concurrent tail: active rows that arrived after the watermark.
             # Snapshot their ids and tool_calls now — the clone below needs a
@@ -12429,17 +12706,11 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
 
             # message_count / tool_call_count reflect the LIVE (active) set —
             # the archived rows are still on disk but not part of the live count.
-            if model_config_patch is None:
-                conn.execute(
-                    "UPDATE sessions SET message_count = ?, tool_call_count = ? WHERE id = ?",
-                    (inserted, tool_calls_total, session_id),
-                )
-            else:
-                conn.execute(
-                    "UPDATE sessions SET message_count = ?, tool_call_count = ?, "
-                    "model_config = ? WHERE id = ?",
-                    (inserted, tool_calls_total, patched_model_config, session_id),
-                )
+            conn.execute(
+                "UPDATE sessions SET message_count = ?, tool_call_count = ?, "
+                "model_config = ? WHERE id = ?",
+                (inserted, tool_calls_total, patched_model_config, session_id),
+            )
             return inserted
 
         return self._execute_write(_do)

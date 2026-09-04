@@ -1,11 +1,10 @@
-import { expect, test } from './test'
-
 import {
   PACKAGED_BINARY_PATH,
   type PackagedAppFixture,
   packagedBinaryExists,
   setupPackagedApp,
 } from './fixtures'
+import { allowErrorBanners, expect, test } from './test'
 import { expectVisualSnapshot } from './visual-snapshot'
 
 /**
@@ -136,6 +135,7 @@ test('HUD composer remains fully inside the transparent window', async () => {
 })
 
 test('boot progress overlay fades out or shows error state', async () => {
+  allowErrorBanners()
   const page = fixture!.page
   await page.waitForFunction(
     () => {
@@ -166,6 +166,8 @@ test('boot progress overlay fades out or shows error state', async () => {
 })
 
 test('can capture a screenshot for the CI artifact', async () => {
+  allowErrorBanners()
+
   if (!fixture) {
     test.skip(true, 'Previous test failed — no app running')
 

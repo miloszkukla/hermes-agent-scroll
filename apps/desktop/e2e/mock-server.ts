@@ -22,6 +22,15 @@ import nodePath from 'node:path'
 
 /** A canned assistant reply used for every chat completion request. */
 export const MOCK_REPLY = 'Hello from the mock inference server! The full boot chain is working.'
+export const SCROLL_REPL_TRIGGER = 'E2E_SCROLL_REPL_TRIGGER'
+export const SCROLL_SANDBOX_DENIAL_TRIGGER = 'E2E_SCROLL_SANDBOX_DENIAL_TRIGGER'
+export const SCROLL_RECOVERY_TRIGGER = 'E2E_SCROLL_RECOVERY_TRIGGER'
+export const SCROLL_TIMEOUT_TRIGGER = 'E2E_SCROLL_TIMEOUT_TRIGGER'
+export const SCROLL_WORKER_CRASH_TRIGGER = 'E2E_SCROLL_WORKER_CRASH_TRIGGER'
+export const SCROLL_OOM_TRIGGER = 'E2E_SCROLL_OOM_TRIGGER'
+export const SCROLL_COLD_SEED_TRIGGER = 'E2E_SCROLL_COLD_SEED_TRIGGER'
+export const SCROLL_COLD_RESUME_TRIGGER = 'E2E_SCROLL_COLD_RESUME_TRIGGER'
+export const SCROLL_RESET_TRIGGER = 'E2E_SCROLL_RESET_TRIGGER'
 
 export interface MockServerOptions {
   /** Pause the matching stream after its first token for session-switch E2E coverage. */
@@ -38,6 +47,8 @@ verificationWritePath?: string
  * handle's `path` to let the test decide when the process exits.
  */
 backgroundReleasePath?: string
+/** Sentinel path that ends the foreground correction-switch tool call. */
+correctionSwitchReleasePath?: string
 }
 
 export interface MockServer {
@@ -105,6 +116,9 @@ const INTERIM_SCRIPT: ScriptedTurn[] = [
 /** Per-server request counter so we can walk through the script turns. */
 let _scriptIndex = 0
 
+/** Per-server counter that keeps scripted tool-call ids unique across turns. */
+let _toolCallBatchIndex = 0
+
 /** Per-server counter for the sidebar-states script (independent from _scriptIndex). */
 let _sidebarScriptIndex = 0
 
@@ -123,18 +137,45 @@ let _verificationStopIndex = 0
 /** Per-server counter for the task-panel warm-resume script. */
 let _taskPanelResumeIndex = 0
 
+/** Per-server counter for the deterministic Scroll tool-call script. */
+let _scrollReplIndex = 0
+
+/** Per-server counters for the deterministic Scroll containment/recovery scripts. */
+let _scrollSandboxDenialIndex = 0
+let _scrollRecoveryIndex = 0
+let _scrollTimeoutIndex = 0
+let _scrollWorkerCrashIndex = 0
+let _scrollOomIndex = 0
+let _scrollColdSeedIndex = 0
+let _scrollColdResumeIndex = 0
+let _scrollResetIndex = 0
+
+/** Per-server counter for the Scroll compaction/rebind script. */
+let _scrollCompactionIndex = 0
+
 /** User messages received by the mock, for E2E assertions on real submits. */
 const _receivedUserTexts: string[] = []
 
 /** Reset the script indices (called between tests via restartMockServer). */
 function resetScriptIndex(): void {
   _scriptIndex = 0
+  _toolCallBatchIndex = 0
   _sidebarScriptIndex = 0
   _sidebarCrossIndex = 0
   _queueStopIndex = 0
   _correctionSwitchIndex = 0
   _verificationStopIndex = 0
   _taskPanelResumeIndex = 0
+  _scrollReplIndex = 0
+  _scrollSandboxDenialIndex = 0
+  _scrollRecoveryIndex = 0
+  _scrollTimeoutIndex = 0
+  _scrollWorkerCrashIndex = 0
+  _scrollOomIndex = 0
+  _scrollColdSeedIndex = 0
+  _scrollColdResumeIndex = 0
+  _scrollResetIndex = 0
+  _scrollCompactionIndex = 0
   _receivedUserTexts.length = 0
 }
 
@@ -178,6 +219,100 @@ const SIDEBAR_SCRIPT: ScriptedTurn[] = [
   {
     text: 'All tasks complete. The background process finished and the subagent returned its summary.',
   },
+]
+
+const SCROLL_REPL_SCRIPT: ScriptedTurn[] = [
+  {
+    text: 'I will recall the requested history through the sandboxed Scroll tool.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: "print(ms.search('E2E_SCROLL_REPL_TRIGGER'))" } }],
+  },
+  { text: 'Scroll recall completed from canonical history.' },
+]
+
+const SCROLL_SANDBOX_DENIAL_SCRIPT: ScriptedTurn[] = [
+  {
+    text: 'I will test the Scroll sandbox boundary.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: 'import os\nprint(os.getcwd())' } }],
+  },
+  {
+    text: 'The filesystem is unavailable; I will verify that network access is unavailable too.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: "import socket\nraise RuntimeError('network module unexpectedly available')" } }],
+  },
+  {
+    text: 'The network is unavailable; I will verify that process execution is unavailable too.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: "import subprocess\nsubprocess.run(['true'])" } }],
+  },
+  { text: 'Scroll correctly denied filesystem, network, and process access without host approval.' },
+]
+
+const SCROLL_RECOVERY_SCRIPT: ScriptedTurn[] = [
+  {
+    text: 'I will recover through the read-only Scroll history surface.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: "print(ms.search('E2E_SCROLL_RECOVERY_TRIGGER')[0]['content'])" } }],
+  },
+  { text: 'Scroll recovered from the denied cell using canonical history.' },
+]
+
+function scrollResourceRecoveryScript(source: string, trigger: string, label: string): ScriptedTurn[] {
+  return [
+    {
+      text: `I will verify Scroll's bounded ${label} behavior.`,
+      toolCalls: [{ name: 'scroll_repl', args: { source } }],
+    },
+    {
+      text: 'I will recover through canonical history after the namespace reset.',
+      toolCalls: [{ name: 'scroll_repl', args: { source: `print(ms.search('${trigger}')[0]['content'])` } }],
+    },
+    { text: `Scroll recovered after the bounded ${label} failure.` },
+  ]
+}
+
+const SCROLL_TIMEOUT_SCRIPT = scrollResourceRecoveryScript('while True:\n    pass', SCROLL_TIMEOUT_TRIGGER, 'timeout')
+const SCROLL_WORKER_CRASH_SCRIPT = scrollResourceRecoveryScript("raise RuntimeError('__scroll_e2e_worker_crash__')", SCROLL_WORKER_CRASH_TRIGGER, 'worker-crash')
+const SCROLL_OOM_SCRIPT = scrollResourceRecoveryScript("blob = 'x' * (64 * 1024 * 1024)", SCROLL_OOM_TRIGGER, 'memory-limit')
+
+const SCROLL_COLD_SEED_SCRIPT: ScriptedTurn[] = [
+  {
+    text: 'I will seed a disposable Scroll namespace before the desktop restart.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: "pre_restart_value = 'must not survive restart'\nprint('cold namespace seeded')" } }],
+  },
+  { text: 'Scroll namespace was seeded before the desktop restart.' },
+]
+
+const SCROLL_COLD_RESUME_SCRIPT: ScriptedTurn[] = [
+  {
+    text: 'I will first recall persisted canonical history in the new namespace.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: "print(ms.search('E2E_SCROLL_COLD_SEED_TRIGGER')[0]['content'])" } }],
+  },
+  {
+    text: 'The first recall succeeded; I will verify that the prior namespace is gone.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: 'print(pre_restart_value)' } }],
+  },
+  { text: 'Scroll recalled pre-restart canonical history before any new persistence flush and rejected the old namespace.' },
+]
+
+const SCROLL_RESET_SCRIPT: ScriptedTurn[] = [
+  {
+    text: 'I will verify that this new session has no prior Scroll lineage.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: "if ms.search('E2E_SCROLL_COLD_SEED_TRIGGER'):\n    raise AssertionError('reset leaked old lineage')" } }],
+  },
+  { text: 'Scroll reset discarded the previous lineage and namespace.' },
+]
+
+export const SCROLL_COMPACTION_TRIGGER = 'E2E_SCROLL_COMPACTION_TRIGGER'
+export const SCROLL_COMPACTION_RESUME_TRIGGER = 'E2E_SCROLL_COMPACTION_RESUME_TRIGGER'
+
+const SCROLL_COMPACTION_SCRIPT: ScriptedTurn[] = [
+  {
+    text: 'I will save a narrow Scroll handle before compaction.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: "seq = ms.search('E2E_SCROLL_COMPACTION_TRIGGER')[0]['seq']\nprint('stored handle')" } }],
+  },
+  { text: 'Scroll handle saved before compaction.' },
+  {
+    text: 'I will verify that the pre-compaction handle cannot be reused.',
+    toolCalls: [{ name: 'scroll_repl', args: { source: 'ms.expand([seq])' } }],
+  },
+  { text: 'Scroll correctly rejected the stale handle after compaction.' },
 ]
 
 // ─── Sidebar cross-session script ──────────────────────────────────────
@@ -256,13 +391,21 @@ const QUEUE_STOP_SCRIPT: ScriptedTurn[] = [
 // The reported correction arrived while a foreground tool was still running.
 // Keep that boundary open long enough for the renderer to redirect the turn,
 // then let the next model request complete normally.
-const CORRECTION_SWITCH_SCRIPT: ScriptedTurn[] = [
-  {
-    text: 'Checking the long-running task before I continue.',
-    toolCalls: [{ name: 'terminal', args: { command: 'sleep 5' } }],
-  },
-  { text: 'The corrected task finished.' },
-]
+function correctionSwitchCommand(releasePath?: string): string {
+  if (!releasePath) return 'sleep 5'
+  const quoted = JSON.stringify(releasePath)
+  return `for _ in $(seq 1 600); do [ -e ${quoted} ] && break; sleep 0.1; done`
+}
+
+function correctionSwitchScript(releasePath?: string): ScriptedTurn[] {
+  return [
+    {
+      text: 'Checking the long-running task before I continue.',
+      toolCalls: [{ name: 'terminal', args: { command: correctionSwitchCommand(releasePath) } }],
+    },
+    { text: 'The corrected task finished.' },
+  ]
+}
 
 export const CORRECTION_SWITCH_TRIGGER = 'E2E_CORRECTION_SWITCH_TRIGGER'
 
@@ -488,6 +631,16 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
           const isSidebarCrossTrigger = userText.includes('E2E_SIDEBAR_CROSS')
           const isQueueStopTrigger = userText.includes('E2E_QUEUE_STOP_TRIGGER')
           const isTaskPanelResumeTrigger = userText.includes(TASK_PANEL_RESUME_TRIGGER)
+          const isScrollReplTrigger = userText.includes(SCROLL_REPL_TRIGGER)
+          const isScrollSandboxDenialTrigger = userText.includes(SCROLL_SANDBOX_DENIAL_TRIGGER)
+          const isScrollRecoveryTrigger = userText.includes(SCROLL_RECOVERY_TRIGGER)
+          const isScrollTimeoutTrigger = userText.includes(SCROLL_TIMEOUT_TRIGGER)
+          const isScrollWorkerCrashTrigger = userText.includes(SCROLL_WORKER_CRASH_TRIGGER)
+          const isScrollOomTrigger = userText.includes(SCROLL_OOM_TRIGGER)
+          const isScrollColdSeedTrigger = userText.includes(SCROLL_COLD_SEED_TRIGGER)
+          const isScrollColdResumeTrigger = userText.includes(SCROLL_COLD_RESUME_TRIGGER)
+          const isScrollResetTrigger = userText.includes(SCROLL_RESET_TRIGGER)
+          const isScrollCompactionTrigger = userText.includes(SCROLL_COMPACTION_TRIGGER) || userText.includes(SCROLL_COMPACTION_RESUME_TRIGGER)
           const isVerificationStopTrigger = messages.some(
             message => typeof message?.content === 'string' && message.content.includes(VERIFICATION_STOP_TRIGGER),
           )
@@ -514,6 +667,116 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
               void heldStreamReleased.then(respond)
             } else {
               respond()
+            }
+            return
+          }
+
+          if (isScrollReplTrigger) {
+            const turn = SCROLL_REPL_SCRIPT[_scrollReplIndex] ?? SCROLL_REPL_SCRIPT[SCROLL_REPL_SCRIPT.length - 1]
+            _scrollReplIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
+
+          if (isScrollSandboxDenialTrigger) {
+            const turn = SCROLL_SANDBOX_DENIAL_SCRIPT[_scrollSandboxDenialIndex] ?? SCROLL_SANDBOX_DENIAL_SCRIPT[SCROLL_SANDBOX_DENIAL_SCRIPT.length - 1]
+            _scrollSandboxDenialIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
+
+          if (isScrollRecoveryTrigger) {
+            const turn = SCROLL_RECOVERY_SCRIPT[_scrollRecoveryIndex] ?? SCROLL_RECOVERY_SCRIPT[SCROLL_RECOVERY_SCRIPT.length - 1]
+            _scrollRecoveryIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
+
+          if (isScrollTimeoutTrigger) {
+            const turn = SCROLL_TIMEOUT_SCRIPT[_scrollTimeoutIndex] ?? SCROLL_TIMEOUT_SCRIPT[SCROLL_TIMEOUT_SCRIPT.length - 1]
+            _scrollTimeoutIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
+
+          if (isScrollWorkerCrashTrigger) {
+            const turn = SCROLL_WORKER_CRASH_SCRIPT[_scrollWorkerCrashIndex] ?? SCROLL_WORKER_CRASH_SCRIPT[SCROLL_WORKER_CRASH_SCRIPT.length - 1]
+            _scrollWorkerCrashIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
+
+          if (isScrollOomTrigger) {
+            const turn = SCROLL_OOM_SCRIPT[_scrollOomIndex] ?? SCROLL_OOM_SCRIPT[SCROLL_OOM_SCRIPT.length - 1]
+            _scrollOomIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
+
+          if (isScrollColdSeedTrigger) {
+            const turn = SCROLL_COLD_SEED_SCRIPT[_scrollColdSeedIndex] ?? SCROLL_COLD_SEED_SCRIPT[SCROLL_COLD_SEED_SCRIPT.length - 1]
+            _scrollColdSeedIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
+
+          if (isScrollColdResumeTrigger) {
+            const turn = SCROLL_COLD_RESUME_SCRIPT[_scrollColdResumeIndex] ?? SCROLL_COLD_RESUME_SCRIPT[SCROLL_COLD_RESUME_SCRIPT.length - 1]
+            _scrollColdResumeIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
+
+          if (isScrollResetTrigger) {
+            const turn = SCROLL_RESET_SCRIPT[_scrollResetIndex] ?? SCROLL_RESET_SCRIPT[SCROLL_RESET_SCRIPT.length - 1]
+            _scrollResetIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
+            }
+            return
+          }
+
+          if (isScrollCompactionTrigger) {
+            const turn = SCROLL_COMPACTION_SCRIPT[_scrollCompactionIndex] ?? SCROLL_COMPACTION_SCRIPT[SCROLL_COMPACTION_SCRIPT.length - 1]
+            _scrollCompactionIndex++
+            if (stream) {
+              streamScriptedTurn(res, model, turn)
+            } else {
+              nonStreamingScriptedTurn(res, model, turn)
             }
             return
           }
@@ -569,7 +832,8 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
           }
 
           if (isCorrectionSwitchTrigger) {
-            const turn = CORRECTION_SWITCH_SCRIPT[_correctionSwitchIndex] ?? CORRECTION_SWITCH_SCRIPT[CORRECTION_SWITCH_SCRIPT.length - 1]
+            const script = correctionSwitchScript(options.correctionSwitchReleasePath)
+            const turn = script[_correctionSwitchIndex] ?? script[script.length - 1]
             _correctionSwitchIndex++
             if (stream) {
               streamScriptedTurn(res, model, turn)
@@ -781,6 +1045,7 @@ function streamScriptedTurn(
 
   const hasToolCalls = turn.toolCalls && turn.toolCalls.length > 0
   const finishReason = hasToolCalls ? 'tool_calls' : 'stop'
+  const toolCallBatch = hasToolCalls ? _toolCallBatchIndex++ : 0
 
   // If there's no text to stream, go straight to the tool_calls / finish.
   if (!turn.text) {
@@ -789,7 +1054,7 @@ function streamScriptedTurn(
         sseChunk(model, {
           tool_calls: turn.toolCalls!.map((tc, idx) => ({
             index: idx,
-            id: `call_e2e_${_scriptIndex}_${idx}`,
+            id: `call_e2e_${toolCallBatch}_${idx}`,
             type: 'function',
             function: { name: tc.name, arguments: JSON.stringify(tc.args) },
           })),
@@ -815,7 +1080,7 @@ function streamScriptedTurn(
           sseChunk(model, {
             tool_calls: turn.toolCalls!.map((tc, idx) => ({
               index: idx,
-              id: `call_e2e_${_scriptIndex}_${idx}`,
+              id: `call_e2e_${toolCallBatch}_${idx}`,
               type: 'function',
               function: { name: tc.name, arguments: JSON.stringify(tc.args) },
             })),
@@ -846,6 +1111,7 @@ function nonStreamingScriptedTurn(
 ): void {
   const hasToolCalls = turn.toolCalls && turn.toolCalls.length > 0
   const finishReason = hasToolCalls ? 'tool_calls' : 'stop'
+  const toolCallBatch = hasToolCalls ? _toolCallBatchIndex++ : 0
 
   const message: Record<string, unknown> = { role: 'assistant' }
   if (turn.text) {
@@ -853,7 +1119,7 @@ function nonStreamingScriptedTurn(
   }
   if (hasToolCalls) {
     message.tool_calls = turn.toolCalls!.map((tc, idx) => ({
-      id: `call_e2e_${_scriptIndex}_${idx}`,
+      id: `call_e2e_${toolCallBatch}_${idx}`,
       type: 'function',
       function: { name: tc.name, arguments: JSON.stringify(tc.args) },
     }))
@@ -885,6 +1151,15 @@ export interface BackgroundReleaseHandle {
   /** Sentinel path — pass as `backgroundReleasePath` to `startMockServer`. */
   path: string
   /** End the background process now (creates the sentinel). */
+  release: () => void
+  /** Remove the sentinel if it still exists. Safe to call twice. */
+  cleanup: () => void
+}
+
+export interface CorrectionSwitchReleaseHandle {
+  /** Sentinel path — pass as `correctionSwitchReleasePath` to `startMockServer`. */
+  path: string
+  /** End the foreground tool call now (creates the sentinel). */
   release: () => void
   /** Remove the sentinel if it still exists. Safe to call twice. */
   cleanup: () => void
@@ -934,6 +1209,32 @@ export function createBackgroundReleaseHandle(): BackgroundReleaseHandle {
         fs.rmSync(path, { force: true })
       } catch {
         // Best-effort — the sentinel lives in the OS temp dir.
+      }
+    },
+  }
+}
+
+/** Test-controlled lifetime for the foreground correction-switch tool call. */
+export function createCorrectionSwitchReleaseHandle(): CorrectionSwitchReleaseHandle {
+  const path = nodePath.join(
+    os.tmpdir(),
+    `hermes-e2e-correction-release-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  )
+  return {
+    path,
+    release: () => {
+      try {
+        fs.writeFileSync(path, 'release')
+      } catch {
+        // The command also has a bounded fallback wait; a failed write must
+        // not hide the test's real assertions.
+      }
+    },
+    cleanup: () => {
+      try {
+        fs.rmSync(path, { force: true })
+      } catch {
+        // Best-effort cleanup for the OS temporary directory.
       }
     },
   }

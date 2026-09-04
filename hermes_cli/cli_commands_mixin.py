@@ -1186,6 +1186,7 @@ class CLICommandsMixin:
             return
 
         old_session_id = self.session_id
+        previous_history = self.conversation_history
         # Flush un-persisted messages before ending the old session (#47202).
         if self.agent:
             try:
@@ -1236,9 +1237,12 @@ class CLICommandsMixin:
         # Sync the agent if already initialised
         if self.agent:
             self.agent.session_id = target_id
-            self.agent.reset_session_state()
+            self.agent.reset_session_state(previous_messages=previous_history, old_session_id=old_session_id)
             if hasattr(self.agent, "_last_flushed_db_idx"):
                 self.agent._last_flushed_db_idx = len(self.conversation_history)
+            publish_snapshot = getattr(self.agent, "_publish_canonical_history_snapshot", None)
+            if callable(publish_snapshot):
+                publish_snapshot()
             if hasattr(self.agent, "_todo_store"):
                 try:
                     from tools.todo_tool import TodoStore
@@ -1594,9 +1598,12 @@ class CLICommandsMixin:
         if self.agent:
             self.agent.session_id = new_session_id
             self.agent.session_start = now
-            self.agent.reset_session_state()
+            self.agent.reset_session_state(previous_messages=self.conversation_history, old_session_id=parent_session_id)
             if hasattr(self.agent, "_last_flushed_db_idx"):
                 self.agent._last_flushed_db_idx = len(self.conversation_history)
+            publish_snapshot = getattr(self.agent, "_publish_canonical_history_snapshot", None)
+            if callable(publish_snapshot):
+                publish_snapshot()
             if hasattr(self.agent, "_todo_store"):
                 try:
                     from tools.todo_tool import TodoStore

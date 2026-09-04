@@ -304,6 +304,8 @@ export function upsertToolPart(
   const prevArgs = prev && 'args' in prev ? prev.args : undefined
   const prevResult = prev && 'result' in prev ? prev.result : undefined
   const args = toolArgs(payload, prevArgs)
+  const result = phase === 'complete' ? toolResult(payload, prevResult, prevArgs) : undefined
+  const isError = resultHasError(result)
 
   const id =
     stableId ||
@@ -319,8 +321,8 @@ export function upsertToolPart(
     timestamp: prev?.timestamp ?? occurredAt,
     ...(phase === 'complete' && {
       completedAt: occurredAt,
-      result: toolResult(payload, prevResult, prevArgs),
-      isError: Boolean(payload?.error)
+      result,
+      isError: Boolean(payload?.error) || isError
     })
   } satisfies ChatMessagePart
 
@@ -645,6 +647,23 @@ function parseStoredToolResult(content: unknown): unknown {
   }
 }
 
+function resultHasError(result: unknown): boolean {
+  const error = recordFromUnknown(result)?.error
+
+  return typeof error === 'string' && error.trim().length > 0
+}
+
+function storedToolResult(toolMessage: SessionMessage): unknown {
+  const storedResult = parseStoredToolResult(toolMessage.content || toolMessage.text || toolMessage.context || '')
+  const error = toolMessage.error
+
+  if (typeof error === 'string' && error.trim()) {
+    return { error }
+  }
+
+  return storedResult
+}
+
 export function toolPartFromStoredCall(call: unknown, fallbackIndex: number, timestamp?: number): ChatMessagePart {
   const row = recordFromUnknown(call) ?? {}
   const fn = recordFromUnknown(row.function)
@@ -669,7 +688,6 @@ export function toolPartFromStoredCall(call: unknown, fallbackIndex: number, tim
 export function applyStoredToolResult(messages: ChatMessage[], toolMessage: SessionMessage): boolean {
   const toolCallId = toolMessage.tool_call_id || undefined
   const toolName = toolMessage.tool_name || toolMessage.name || 'tool'
-  const content = toolMessage.content || toolMessage.text || toolMessage.context || toolMessage.name
 
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i]
@@ -690,11 +708,12 @@ export function applyStoredToolResult(messages: ChatMessage[], toolMessage: Sess
 
     const parts = [...message.parts]
     const existing = parts[partIndex]
+    const result = storedToolResult(toolMessage)
     parts[partIndex] = {
       ...existing,
       completedAt: toolMessage.timestamp,
-      result: parseStoredToolResult(content),
-      isError: false
+      result,
+      isError: resultHasError(result)
     } as ChatMessagePart
     messages[i] = { ...message, parts }
 
@@ -710,7 +729,6 @@ export function applyStoredToolResultToParts(
 ): ChatMessagePart[] | null {
   const toolCallId = toolMessage.tool_call_id || undefined
   const toolName = toolMessage.tool_name || toolMessage.name || 'tool'
-  const content = toolMessage.content || toolMessage.text || toolMessage.context || toolMessage.name
 
   const partIndex = parts.findIndex(
     part =>
@@ -724,11 +742,12 @@ export function applyStoredToolResultToParts(
 
   const next = [...parts]
   const existing = next[partIndex]
+  const result = storedToolResult(toolMessage)
   next[partIndex] = {
     ...existing,
     completedAt: toolMessage.timestamp,
-    result: parseStoredToolResult(content),
-    isError: false
+    result,
+    isError: resultHasError(result)
   } as ChatMessagePart
 
   return next
@@ -743,6 +762,8 @@ export function storedToolMessagePart(toolMessage: SessionMessage, fallbackIndex
   // title-side placeholder.
   const storedArgs = parseMaybeJsonObject(toolMessage.args)
   const args = { ...storedArgs, ...(context ? { context } : {}) }
+  const storedResult = storedToolResult(toolMessage)
+  const result = resultHasError(storedResult) ? storedResult : context ? { context } : {}
 
   return {
     type: 'tool-call',
@@ -752,8 +773,8 @@ export function storedToolMessagePart(toolMessage: SessionMessage, fallbackIndex
     argsText: Object.keys(args).length ? JSON.stringify(args) : '',
     timestamp: toolMessage.timestamp,
     completedAt: toolMessage.timestamp,
-    result: context ? { context } : {},
-    isError: false
+    result,
+    isError: resultHasError(result)
   }
 }
 

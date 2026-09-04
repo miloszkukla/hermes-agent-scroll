@@ -690,12 +690,28 @@ class AIAgent:
                 profile_name=_profile_for_session,
             )
             self._session_db_created = True
+            self._publish_canonical_history_snapshot()
         except Exception as e:
             # Transient failure (e.g. SQLite lock). Keep _session_db alive —
             # _session_db_created stays False so next run_conversation() retries.
             logger.warning(
                 "Session DB creation failed (will retry next turn): %s", e
             )
+
+    def _publish_canonical_history_snapshot(self) -> None:
+        """Deliver a value-only history projection to engines that opt in."""
+        engine = getattr(self, "context_compressor", None)
+        if not engine or getattr(engine, "uses_canonical_history_snapshots", False) is not True:
+            return
+        callback = getattr(engine, "on_canonical_history_snapshot", None)
+        db = getattr(self, "_session_db", None)
+        session_id = getattr(self, "session_id", "")
+        if not callable(callback) or not db or not session_id:
+            return
+        try:
+            callback(db.get_canonical_history_snapshot(session_id))
+        except Exception:
+            logger.debug("context engine canonical-history snapshot delivery failed", exc_info=True)
 
     def _transition_context_engine_session(
         self,
@@ -745,6 +761,7 @@ class AIAgent:
                 "carry_over_context": carry_over_context,
                 "platform": _session_source_for_agent(getattr(self, "platform", None)),
                 "model": getattr(self, "model", ""),
+                "hermes_home": str(get_hermes_home()),
                 "context_length": getattr(engine, "context_length", None),
                 "conversation_id": getattr(self, "_gateway_session_key", None),
             }
@@ -2449,6 +2466,7 @@ class AIAgent:
                 from agent.transcript_repair import sync_flushed_message_markers
 
                 sync_flushed_message_markers(_batch_msgs, _batch_rows)
+                self._publish_canonical_history_snapshot()
             # The intrinsic markers are now the sole source of truth. Reset the
             # one-shot seed so no id() outlives this flush to alias a message
             # allocated next turn at a recycled address.
@@ -3569,12 +3587,20 @@ class AIAgent:
             # in those stubs.
             existing = getattr(self, "_pending_steer", None)
             self._pending_steer = (existing + "\n" + cleaned) if existing else cleaned
-            return True
-        with _lock:
-            if self._pending_steer:
-                self._pending_steer = self._pending_steer + "\n" + cleaned
-            else:
-                self._pending_steer = cleaned
+        else:
+            with _lock:
+                if self._pending_steer:
+                    self._pending_steer = self._pending_steer + "\n" + cleaned
+                else:
+                    self._pending_steer = cleaned
+        session_id = getattr(self, "session_id", None)
+        db = getattr(self, "_session_db", None)
+        record_pending = getattr(db, "record_pending_tool_steer", None)
+        if getattr(self, "_executing_tools", False) and isinstance(session_id, str) and callable(record_pending):
+            try:
+                record_pending(session_id, cleaned)
+            except Exception:
+                logger.debug("Failed to persist pending steer", exc_info=True)
         return True
 
     def redirect(self, text: str) -> bool:
@@ -4479,7 +4505,7 @@ class AIAgent:
             except Exception:
                 pass
 
-    def commit_memory_session(self, messages: list = None) -> None:
+    def commit_memory_session(self, messages: list = None, *, notify_context_engine_end: bool = True) -> None:
         """Trigger end-of-session extraction without tearing providers down.
         Called when session_id rotates (e.g. /new, context compression);
         providers keep their state and continue running under the old
@@ -4489,13 +4515,11 @@ class AIAgent:
                 self._memory_manager.on_session_end(messages or [])
             except Exception:
                 pass
-        # Notify context engine of session end too — same lifecycle moment as
-        # the memory manager's on_session_end. Without this, engines that
-        # accumulate per-session state (DAGs, summaries) leak that state from
-        # the rotated-out session into whatever comes next under the same
-        # compressor instance. Mirrors the call in shutdown_memory_provider().
-        # See issue #22394.
-        if hasattr(self, "context_compressor") and self.context_compressor:
+        # A compaction boundary extracts memory before it replaces the
+        # transcript, but external context engines receive the boundary through
+        # on_session_start(..., boundary_reason="compression") and may retain
+        # in-process state across the inherited lineage.
+        if notify_context_engine_end and hasattr(self, "context_compressor") and self.context_compressor:
             try:
                 self.context_compressor.on_session_end(
                     self.session_id or "",

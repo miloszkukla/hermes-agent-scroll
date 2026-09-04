@@ -4917,19 +4917,34 @@ def apply_pending_steer_to_tool_results(agent, messages: list, num_tool_msgs: in
             agent._pending_steer = (existing + "\n" + steer_text) if existing else steer_text
         return
     marker = format_steer_marker(steer_text)
-    existing_content = messages[target_idx].get("content", "")
+    target = messages[target_idx]
+    existing_content = target.get("content", "")
     if not isinstance(existing_content, str):
         # Anthropic multimodal content blocks — preserve them and append
         # a text block at the end.
         try:
             blocks = list(existing_content) if existing_content else []
             blocks.append({"type": "text", "text": marker.lstrip()})
-            messages[target_idx]["content"] = blocks
+            target["content"] = blocks
         except Exception:
             # Fall back to string replacement if content shape is unexpected.
-            messages[target_idx]["content"] = f"{existing_content}{marker}"
+            target["content"] = f"{existing_content}{marker}"
     else:
-        messages[target_idx]["content"] = existing_content + marker
+        target["content"] = existing_content + marker
+    metadata = target.get("display_metadata")
+    metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    corrections = metadata.get("steer_corrections")
+    corrections = list(corrections) if isinstance(corrections, list) else []
+    metadata["steer_corrections"] = [*corrections, steer_text]
+    target["display_metadata"] = metadata
+    tool_call_id = target.get("tool_call_id")
+    db = getattr(agent, "_session_db", None)
+    record_tool_steer = getattr(db, "record_tool_steer", None)
+    if isinstance(tool_call_id, str) and isinstance(target["content"], str) and callable(record_tool_steer):
+        try:
+            record_tool_steer(agent.session_id, tool_call_id, target["content"], steer_text)
+        except Exception:
+            _ra().logger.debug("Failed to persist delivered steer", exc_info=True)
     _ra().logger.info(
         "Delivered /steer to agent after tool batch (%d chars): %s",
         len(steer_text),

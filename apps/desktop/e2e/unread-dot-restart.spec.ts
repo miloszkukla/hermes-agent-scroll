@@ -47,6 +47,7 @@ const HELD_PROMPT = 'E2E unread restart: hold this stream until released.'
 const SECOND_PROMPT = 'E2E unread restart: second session, read while open.'
 
 const unreadDots = (page: Page) => page.locator(`[aria-label="${UNREAD_DOT_LABEL}"]`)
+const sessionRow = (page: Page, text: string) => page.locator('button[data-slot="row-button"]', { hasText: text }).first()
 
 async function sendMessage(page: Page, text: string): Promise<void> {
   const composer = page.locator('[contenteditable="true"]').first()
@@ -115,6 +116,14 @@ test.describe('unread dot survives app restart', () => {
       { timeout: 30_000 },
     )
 
+    // Streamed text is not a completion boundary: make sure B's busy→idle
+    // edge has landed while it is still selected before turning A loose.
+    await expect(sessionRow(page, SECOND_PROMPT)).toBeVisible({ timeout: 30_000 })
+    await expect
+      .poll(() => sessionRow(page, SECOND_PROMPT).locator('[aria-label="Session running"]').count(), { timeout: 30_000 })
+      .toBe(0)
+    expect(await unreadDots(page).count(), 'the selected session must stay read').toBe(0)
+
     // ── 3. Release A's stream → background finish paints A's dot ──────
     fixture.mock.releaseHeldStream()
 
@@ -123,7 +132,8 @@ test.describe('unread dot survives app restart', () => {
         timeout: 30_000,
         message: 'green unread dot should appear after the background finish',
       })
-      .toBeGreaterThan(0)
+      .toBe(1)
+    await expect(sessionRow(page, HELD_PROMPT).locator(`[aria-label="${UNREAD_DOT_LABEL}"]`)).toHaveCount(1)
 
     // ── 4. Restart the app — the dot must survive ──────────────────────
     // The app reopens into session B (or a fresh draft), NOT session A, so
@@ -135,14 +145,11 @@ test.describe('unread dot survives app restart', () => {
         timeout: 60_000,
         message: 'green unread dot should be rebuilt from persisted state after restart',
       })
-      .toBeGreaterThan(0)
+      .toBe(1)
+    await expect(sessionRow(page, HELD_PROMPT).locator(`[aria-label="${UNREAD_DOT_LABEL}"]`)).toHaveCount(1)
 
     // ── 5. Open session A — the dot clears ─────────────────────────────
-    // The dot sits inside A's sidebar row button; click that row.
-    await unreadDots(page)
-      .first()
-      .locator('xpath=ancestor::button[1]')
-      .click()
+    await sessionRow(page, HELD_PROMPT).click()
 
     await expect
       .poll(() => unreadDots(page).count(), {

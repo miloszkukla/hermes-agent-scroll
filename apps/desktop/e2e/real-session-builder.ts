@@ -1,10 +1,23 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { createInterface } from 'node:readline'
 
 const DESKTOP_ROOT = path.resolve(import.meta.dirname, '..')
 const REPO_ROOT = path.resolve(DESKTOP_ROOT, '..', '..')
 const DEFAULT_TIMEOUT_MS = 60_000
+const LOCAL_UV = path.join(REPO_ROOT, '.uv', 'tools', 'uv-x86_64-unknown-linux-gnu', 'uv')
+
+function resolveUvBinary(): string {
+  const configured = process.env.HERMES_E2E_UV_BIN
+  if (configured && fs.existsSync(configured)) {
+    return configured
+  }
+  if (fs.existsSync(LOCAL_UV)) {
+    return LOCAL_UV
+  }
+  throw new Error(`locked E2E uv binary not found; expected ${LOCAL_UV}`)
+}
 
 interface JsonRpcError {
   code?: number
@@ -71,12 +84,13 @@ export class RealSessionBuilder {
   private closed = false
 
   private constructor(hermesHome: string) {
-    this.child = spawn('uv', ['run', '--active', '--no-sync', 'python', '-m', 'tui_gateway.entry'], {
+    this.child = spawn(resolveUvBinary(), ['run', '--active', '--no-sync', 'python', '-m', 'tui_gateway.entry'], {
       cwd: REPO_ROOT,
       env: {
         ...process.env,
         HERMES_HOME: hermesHome,
         PYTHONPATH: REPO_ROOT,
+        VIRTUAL_ENV: path.join(REPO_ROOT, '.venv'),
       },
       stdio: 'pipe',
     })

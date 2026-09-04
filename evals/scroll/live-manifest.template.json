@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "live_model": false,
+  "implementation_commit": "REPLACE_WITH_REVIEWED_COMMIT",
+  "plan_sha256": "7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210",
+  "credential_free_manifest_sha256": "b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e",
+  "agent_prompt_sha256": "REPLACE_WITH_AGENT_PROMPT_SHA256",
+  "provider": "REPLACE_WITH_PROVIDER",
+  "authentication_mode": "REPLACE_WITH_AUTH_MODE_WITHOUT_CREDENTIALS",
+  "agent_model": "REPLACE_WITH_AGENT_MODEL",
+  "judge_model": "REPLACE_WITH_JUDGE_MODEL",
+  "judge_source": "REPLACE_WITH_PINNED_JUDGE_SOURCE",
+  "temperature": null,
+  "seed": null,
+  "context_window_tokens": null,
+  "max_iterations": null,
+  "max_output_tokens": null,
+  "input_token_budget": null,
+  "output_token_budget": null,
+  "input_price_per_token": null,
+  "output_price_per_token": null,
+  "cost_ceiling_usd": null,
+  "source_revisions": {},
+  "licenses": {},
+  "datasets": [],
+  "arms": {
+    "stock": "REPLACE_WITH_IDENTICAL_FROZEN_SETTINGS_DIGEST",
+    "scroll": "REPLACE_WITH_IDENTICAL_FROZEN_SETTINGS_DIGEST"
+  }
+}

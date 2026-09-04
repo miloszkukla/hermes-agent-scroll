@@ -1671,6 +1671,33 @@ def test_tui_non_interactive_tool_lifecycle_stays_hidden_when_tool_progress_off(
     assert events == []
 
 
+def test_tui_tool_complete_projects_a_structured_tool_error(monkeypatch):
+    events: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(
+        server, "_emit", lambda event_type, sid, payload: events.append((event_type, sid, payload))
+    )
+    monkeypatch.setitem(
+        server._sessions,
+        "tool-error-test",
+        {"tool_progress_mode": "all", "tool_started_at": {}},
+    )
+
+    result = '{"error":"RECALL FAILED: namespace reset after the time limit exceeded","namespace_reset":true}'
+    server._on_tool_complete("tool-error-test", "tool-1", "scroll_repl", {}, result)
+
+    assert events == [(
+        "tool.complete",
+        "tool-error-test",
+        {
+            "tool_id": "tool-1",
+            "name": "scroll_repl",
+            "args": {},
+            "result": json.loads(result),
+            "error": "RECALL FAILED: namespace reset after the time limit exceeded",
+        },
+    )]
+
+
 def test_dispatch_rejects_non_object_request():
     resp = server.dispatch([])
 
@@ -2861,6 +2888,31 @@ def test_history_to_messages_ships_full_tool_args():
         [{"role": "tool", "content": "{}", "tool_call_id": "missing"}]
     )
     assert "args" not in argless[0]
+
+
+def test_history_to_messages_projects_structured_tool_errors_without_raw_output():
+    history = [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "function": {"name": "scroll_repl", "arguments": '{"source":"print(value)"}'},
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "content": json.dumps({"error": "NameError: value is not defined", "output": "secret output"}),
+            "tool_call_id": "call_1",
+        },
+    ]
+
+    rows = server._history_to_messages(history)
+
+    assert rows[0]["error"] == "NameError: value is not defined"
+    assert "secret output" not in str(rows)
 
 
 def test_tool_start_ships_full_args(monkeypatch):

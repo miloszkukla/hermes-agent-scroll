@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "lane": "credential-free-scroll-deterministic",
+  "source_commits": {
+    "hermes": "29112bef099274229cadff79cdff7bf7b99c4b77",
+    "scroll": "313077708ea105cc79bf0a997338e14dae916f8c",
+    "qwenpaw_behavior_oracles": "3db60c5975187fc7c549e16573567a7cd21fd51f"
+  },
+  "fixtures": [
+    "temporal-update",
+    "conflicting-evidence",
+    "dispersed-aggregation",
+    "exact-value",
+    "parallel-tool-groups",
+    "failed-retried-tools",
+    "cache-loss-resume",
+    "corruption-fallback"
+  ],
+  "live_model": false
+}

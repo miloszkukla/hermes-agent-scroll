@@ -124,7 +124,7 @@ auxiliary:
     await expect(page.getByRole('status', { name: 'Summarizing thread' }).last()).toBeVisible()
 
     const primary = page.locator('[data-slot="composer-root"] button[type="submit"]')
-    await expect(primary).toHaveAttribute('aria-label', 'Queue message')
+    await expect(primary).toHaveAttribute('aria-label', 'Stop')
 
     await send(page, queued)
     await expect(page.getByText('1 Queued')).toBeVisible()

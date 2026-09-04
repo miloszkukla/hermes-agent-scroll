@@ -10,7 +10,7 @@ import { type TestInfo } from '@playwright/test'
 import { expect, test, type Page } from './test'
 
 import { type MockBackendFixture, setupMockBackend, waitForAppReady } from './fixtures'
-import { CORRECTION_SWITCH_TRIGGER, MOCK_REPLY } from './mock-server'
+import { createCorrectionSwitchReleaseHandle, CORRECTION_SWITCH_TRIGGER, MOCK_REPLY, type CorrectionSwitchReleaseHandle } from './mock-server'
 
 const OTHER_SESSION_PROMPT = 'E2E persisted session used for a warm resume.'
 const ORIGINAL_PROMPT = `${CORRECTION_SWITCH_TRIGGER}: original prompt must remain singular after a correction.`
@@ -45,7 +45,7 @@ async function steer(page: Page, text: string): Promise<void> {
   await composer.waitFor({ state: 'visible', timeout: 15_000 })
   await composer.click()
   await composer.type(text, { delay: 5 })
-  await expect(primary).toHaveAttribute('aria-label', /Steer/)
+  await expect(primary).toHaveAttribute('aria-label', 'Send')
   await primary.click()
 }
 
@@ -136,17 +136,11 @@ async function openSidebarSession(page: Page, sidebarText: string, expectedTrans
   await waitForTranscriptText(page, expectedTranscriptText)
 }
 
-async function reopenOriginalSession(page: Page): Promise<void> {
-  // A still-running tool has not generated a final title yet, so the sidebar
-  // retains the source prompt as its provisional session title.
-  await openSidebarSession(page, ORIGINAL_PROMPT, ORIGINAL_PROMPT)
-}
-
-async function reopenInferenceSession(page: Page): Promise<void> {
-  const row = page.locator('[data-slot="sidebar"] button').filter({ hasText: INFERENCE_PROMPT }).first()
+async function reopenWorkingSession(page: Page, expectedTranscriptText: string): Promise<void> {
+  const row = page.locator('[data-slot="sidebar"] [data-working="true"] button').first()
   await row.waitFor({ state: 'visible', timeout: 30_000 })
   await row.click()
-  await waitForTranscriptText(page, INFERENCE_PROMPT)
+  await waitForTranscriptText(page, expectedTranscriptText)
 }
 
 function relevantOrder(messages: string[]): string[] {
@@ -170,17 +164,25 @@ function steerTurnOrder(messages: string[]): string[] {
 
 test.describe('correction session switch', () => {
   let fixture: MockBackendFixture | null = null
+  let toolRelease: CorrectionSwitchReleaseHandle | null = null
 
   test.beforeEach(async () => {
+    toolRelease = createCorrectionSwitchReleaseHandle()
     fixture = await setupMockBackend({
-      mockServer: { holdFirstStreamForPrompt: INFERENCE_SWITCH_TRIGGER },
+      mockServer: {
+        holdFirstStreamForPrompt: INFERENCE_SWITCH_TRIGGER,
+        correctionSwitchReleasePath: toolRelease.path,
+      },
     })
     await waitForAppReady(fixture, 120_000)
   })
 
   test.afterEach(async () => {
+    toolRelease?.release()
     await fixture?.cleanup()
+    toolRelease?.cleanup()
     fixture = null
+    toolRelease = null
   })
 
   test('keeps a live correction in place and does not duplicate its original prompt after switching sessions', async ({}, testInfo: TestInfo) => {
@@ -209,17 +211,27 @@ test.describe('correction session switch', () => {
 
     // Reproduce the observed race: switch to another persisted session while
     // the foreground tool is live, then return before its redirect settles.
-    await openSidebarSession(page, MOCK_REPLY, OTHER_SESSION_PROMPT)
-    await reopenOriginalSession(page)
-    await page.waitForTimeout(500)
+    await openSidebarSession(page, OTHER_SESSION_PROMPT, OTHER_SESSION_PROMPT)
+    await reopenWorkingSession(page, ORIGINAL_PROMPT)
+    await expect
+      .poll(async () => relevantOrder(await transcriptTextOrder(page)), {
+        message: 'correction should stay in place after the warm resume',
+        timeout: 30_000,
+    })
+      .toEqual(orderBeforeSwitch)
     await page.screenshot({ path: testInfo.outputPath('correction-after-warm-resume.png') })
 
-    expect(relevantOrder(await transcriptTextOrder(page))).toEqual(orderBeforeSwitch)
     expect(await textNodeOccurrences(page, ORIGINAL_PROMPT)).toBe(1)
     expect(await textNodeOccurrences(page, CORRECTION)).toBe(1)
 
+    toolRelease!.release()
     await waitForTranscriptText(page, CORRECTED_REPLY)
-    expect(steerTurnOrder(await transcriptMessageOrder(page))).toEqual([ORIGINAL_PROMPT, CORRECTION, CORRECTED_REPLY])
+    await expect
+      .poll(async () => steerTurnOrder(await transcriptMessageOrder(page)), {
+        message: 'steered turn should settle as prompt → correction → corrected reply',
+        timeout: 30_000,
+      })
+      .toEqual([ORIGINAL_PROMPT, CORRECTION, CORRECTED_REPLY])
   })
 
   test('keeps an inference-time correction visible through a warm session switch', async ({}, testInfo: TestInfo) => {
@@ -236,8 +248,8 @@ test.describe('correction session switch', () => {
     await send(page, INFERENCE_CORRECTION)
     await waitForTranscriptText(page, INFERENCE_CORRECTION)
 
-    await openSidebarSession(page, MOCK_REPLY, OTHER_SESSION_PROMPT)
-    await reopenInferenceSession(page)
+    await openSidebarSession(page, OTHER_SESSION_PROMPT, OTHER_SESSION_PROMPT)
+    await reopenWorkingSession(page, INFERENCE_PROMPT)
 
     expect(await textNodeOccurrences(page, INFERENCE_PROMPT)).toBe(1)
     expect(await textNodeOccurrences(page, INFERENCE_CORRECTION)).toBe(1)

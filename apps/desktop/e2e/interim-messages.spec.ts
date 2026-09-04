@@ -23,8 +23,12 @@
  *       transcript.
  *
  *   display.interim_assistant_messages: false
- *     → only the final text is visible (no message.interim events emitted,
- *       so all streamed interim text is replaced at message.complete).
+ *     → no message.interim events are emitted, so no sealed interim bubbles
+ *       are created while streaming. Since the post-turn stored-history
+ *       reconcile converges the visible transcript to the persisted
+ *       transcript — which contains the mid-turn commentary as real assistant
+ *       rows — the settled DOM shows the whole turn as ONE assistant message
+ *       containing commentary + final. The flag governs live sealing only.
  *
  * Prerequisite: `npm run build` must have been run so dist/ exists.
  */
@@ -72,7 +76,7 @@ async function sendInterimMessage(page: Page): Promise<void> {
   )
 
   // Give the renderer a moment to settle any final state updates
-  // (hydration, session refresh) before asserting.
+  // (hydration, stored-history reconcile, session refresh) before asserting.
   await page.waitForTimeout(2000)
 }
 
@@ -125,6 +129,17 @@ async function countTranscriptMessagesContaining(page: Page, text: string): Prom
   )
 }
 
+/** Count assistant message roots in the settled transcript. */
+async function countAssistantMessageRoots(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const viewport = document.querySelector('[data-slot="aui_thread-viewport"]')
+
+    return viewport
+      ? viewport.querySelectorAll('[data-slot="aui_assistant-message-root"]').length
+      : 0
+  })
+}
+
 // ─── Flag ON: interim_assistant_messages = true (default) ─────────────
 
 test.describe('interim assistant messages — flag ON (default)', () => {
@@ -147,8 +162,10 @@ test.describe('interim assistant messages — flag ON (default)', () => {
     await sendInterimMessage(page)
 
     // Every interim text (turns with visible text + tool calls) must be
-    // present in the transcript as its own sealed message — NOT wiped by
-    // message.complete.
+    // present in the settled transcript — NOT wiped by message.complete.
+    // (Live, each seals as its own bubble; the post-turn stored-history
+    // reconcile then converges the turn into one assistant message that
+    // still carries all of them.)
     for (const interimText of INTERIM_TEXTS.interims) {
       await expect
         .poll(
@@ -165,6 +182,13 @@ test.describe('interim assistant messages — flag ON (default)', () => {
         { timeout: 15_000, message: 'final text should be visible' },
       )
       .toBeGreaterThanOrEqual(1)
+
+    // No duplicates: the reconcile must CONVERGE (replace the sealed live
+    // bubbles), never render a stored copy alongside a live one.
+    for (const text of [...INTERIM_TEXTS.interims, INTERIM_TEXTS.finalText]) {
+      const count = await countTranscriptMessagesContaining(page, text)
+      expect(count, `"${text}" must not be duplicated after reconcile`).toBe(1)
+    }
   })
 })
 
@@ -187,7 +211,7 @@ test.describe('interim assistant messages — flag OFF', () => {
     await fixture?.cleanup()
   })
 
-  test('only the final response is visible; all interim texts are wiped', async () => {
+  test('settled transcript converges to stored history as a single turn message', async () => {
     const page = fixture.page
     await sendInterimMessage(page)
 
@@ -199,17 +223,28 @@ test.describe('interim assistant messages — flag OFF', () => {
       )
       .toBeGreaterThanOrEqual(1)
 
-    // NONE of the interim texts should be visible — with the flag off,
-    // the tui_gateway never installs interim_assistant_callback, so no
-    // message.interim events are emitted. All streamed interim text is
-    // accumulated into the streaming bubble and replaced by
-    // message.complete.
-    for (const interimText of INTERIM_TEXTS.interims) {
-      const count = await countTranscriptMessagesContaining(page, interimText)
-      expect(
-        count,
-        `interim text "${interimText}" should NOT be visible when flag is off`,
-      ).toBe(0)
+    // With the flag off, the tui_gateway never installs
+    // interim_assistant_callback, so no message.interim events fire and no
+    // sealed interim bubbles are created while streaming. After
+    // message.complete, the stored-history reconcile converges the view to
+    // the persisted transcript, which contains the mid-turn commentary as
+    // real assistant rows — exactly what a resume of this session would show.
+    await expect
+      .poll(
+        () => countAssistantMessageRoots(page),
+        { timeout: 15_000, message: 'the settled turn should render as one assistant message' },
+      )
+      .toBe(1)
+
+    // The converged message contains every commentary text and the final text
+    // exactly once.
+    for (const text of [...INTERIM_TEXTS.interims, INTERIM_TEXTS.finalText]) {
+      await expect
+        .poll(
+          () => countTranscriptMessagesContaining(page, text),
+          { timeout: 15_000, message: `"${text}" should appear exactly once in the converged turn` },
+        )
+        .toBe(1)
     }
   })
 })

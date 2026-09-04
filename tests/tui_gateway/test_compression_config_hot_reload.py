@@ -10,6 +10,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from agent.context_compressor import ContextCompressor
+from plugins.context_engine.scroll.engine import ScrollContextEngine
 from tui_gateway import server
 
 
@@ -97,6 +98,31 @@ def test_live_codex_native_threshold_applies_on_next_turn(monkeypatch):
     server._sync_agent_compression_with_config("sid-95151", session)
 
     assert session["agent"].codex_responses_compact_threshold == 120_000
+
+
+def test_live_config_preserves_external_engine_retention_policy(monkeypatch):
+    engine = ScrollContextEngine()
+    agent = SimpleNamespace(
+        model="gpt-5.6-sol",
+        provider="openai-codex",
+        context_compressor=engine,
+        compression_enabled=True,
+        compression_idle_compact_after_seconds=0,
+        codex_responses_native_compaction=False,
+        codex_responses_compact_threshold=200_000,
+    )
+    session = {"agent": agent, "session_key": "session-scroll-policy"}
+
+    monkeypatch.setattr(
+        server,
+        "_load_cfg",
+        lambda: {"compression": {"protect_last_n": 20, "threshold": 0.50}},
+    )
+
+    server._sync_agent_compression_with_config("sid-scroll-policy", session)
+
+    assert engine.protect_first_n == 3
+    assert engine.protect_last_n == 8
 
 
 def test_unchanged_compression_config_is_noop(monkeypatch):

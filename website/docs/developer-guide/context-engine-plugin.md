@@ -92,6 +92,7 @@ These have sensible defaults in the ABC. Override as needed:
 | `on_session_start(session_id, **kwargs)` | No-op | You need to load persisted state (DAG, DB) |
 | `on_session_end(session_id, messages)` | No-op | You need to flush state, close connections |
 | `on_session_reset()` | Resets token counters | You have per-session state to clear |
+| `on_canonical_history_snapshot(snapshot)` | No-op | You opt into Hermes's immutable, redacted canonical-history projection |
 | `update_model(model, context_length, ...)` | Updates context_length + threshold | You need to recalculate budgets on model switch |
 | `get_tool_schemas()` | Returns `[]` | Your engine provides agent-callable tools (e.g., `lcm_grep`) |
 | `handle_tool_call(name, args, **kwargs)` | Returns error JSON | You implement tool handlers |
@@ -216,6 +217,22 @@ Only one engine can be registered. A second plugin attempting to register is rej
 ```
 
 `on_session_reset()` is called on `/new` or `/reset` to clear per-session state without a full shutdown.
+
+### Canonical history snapshots
+
+An engine that sets `uses_canonical_history_snapshots = True` receives
+`CanonicalHistorySnapshot` values after a durable write and after a committed
+compaction boundary. The snapshot is an immutable, transactionally consistent
+projection of active and recall-eligible compacted history. It carries a
+logical lineage, generation, high-water mark, and generation-scoped `_row_id`
+and order keys. Rows expose host-redacted text, degraded artifact references,
+normalized tool/correlation metadata, and `is_compressed_summary`.
+
+Do not retain message IDs across a newer generation: carried-tail clones and
+compaction can replace them. Do not expect undone, reset, deleted, reasoning,
+or transient `_db_persisted` / `_compaction_tail` data in the projection.
+Engines receive value objects only; a context-engine plugin must never be
+given a `SessionDB`, connection, database path, or read-context callback.
 
 ## Configuration
 

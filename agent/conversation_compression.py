@@ -77,6 +77,7 @@ from agent.model_metadata import (
     estimate_request_tokens_rough,
 )
 from agent.session_activity import ActivityProvenance, normalize_activity_provenance
+from hermes_constants import get_hermes_home
 
 logger = logging.getLogger(__name__)
 
@@ -2019,26 +2020,30 @@ def _adopt_live_compression_child(
         id(message) for message in recovered if isinstance(message, dict)
     }
 
+    bind_state = getattr(agent.context_compressor, "bind_session_state", None)
+    if callable(bind_state):
+        try:
+            bind_state(session_db=session_db, session_id=child_session_id)
+        except Exception:
+            logger.debug("context engine compression-child binding failed", exc_info=True)
     on_session_start = getattr(agent.context_compressor, "on_session_start", None)
     if callable(on_session_start):
         try:
-            on_session_start(
-                child_session_id,
-                boundary_reason="compression",
-                old_session_id=parent_session_id,
-                session_db=session_db,
-                platform=getattr(agent, "platform", None) or "cli",
-                conversation_id=getattr(agent, "_gateway_session_key", None),
-            )
+            lifecycle_context = {
+                "boundary_reason": "compression",
+                "old_session_id": parent_session_id,
+                "platform": getattr(agent, "platform", None) or "cli",
+                "hermes_home": str(get_hermes_home()),
+                "conversation_id": getattr(agent, "_gateway_session_key", None),
+            }
+            if getattr(agent.context_compressor, "uses_canonical_history_snapshots", False) is not True:
+                lifecycle_context["session_db"] = session_db
+            on_session_start(child_session_id, **lifecycle_context)
+            publish_snapshot = getattr(agent, "_publish_canonical_history_snapshot", None)
+            if callable(publish_snapshot):
+                publish_snapshot()
         except Exception as exc:
             logger.debug("context engine compression-child adoption failed: %s", exc)
-    else:
-        bind_state = getattr(agent.context_compressor, "bind_session_state", None)
-        if callable(bind_state):
-            try:
-                bind_state(session_db=session_db, session_id=child_session_id)
-            except Exception:
-                pass
     try:
         if agent._memory_manager:
             agent._memory_manager.on_session_switch(
@@ -3026,13 +3031,20 @@ def _notify_context_engine_compression_complete(
     if not callable(callback):
         return False
     try:
+        bind_state = getattr(agent.context_compressor, "bind_session_state", None)
+        if callable(bind_state):
+            bind_state(session_db=getattr(agent, "_session_db", None), session_id=new_session_id)
         callback(
             new_session_id,
             boundary_reason="compression",
             old_session_id=old_session_id,
             platform=getattr(agent, "platform", None) or "cli",
+            hermes_home=str(get_hermes_home()),
             conversation_id=getattr(agent, "_gateway_session_key", None),
         )
+        publish_snapshot = getattr(agent, "_publish_canonical_history_snapshot", None)
+        if callable(publish_snapshot):
+            publish_snapshot()
     except Exception:
         # Context-engine hooks are observers. A callback failure must not undo
         # history that the core or an outer host transaction already committed.
@@ -4461,7 +4473,7 @@ def compress_context(
                 # transcript is rewritten (runs in BOTH modes — the logical
                 # conversation's pre-compaction turns are about to be summarized
                 # away regardless of whether the id rotates).
-                agent.commit_memory_session(messages)
+                agent.commit_memory_session(messages, notify_context_engine_end=False)
 
                 # Pop the #86366 carried-forward-tail tags BEFORE the size
                 # estimate and BEFORE any non-in-place path can see them:
@@ -4629,6 +4641,9 @@ def compress_context(
                         lock_holder=_lock_holder,
                         tail_count=_tail_count,
                     )
+                    publish_snapshot = getattr(agent, "_publish_canonical_history_snapshot", None)
+                    if callable(publish_snapshot):
+                        publish_snapshot()
                     split_status = "in_place_committed"
                     # Post-commit contract (#98450, mirrors
                     # _sync_micro_compact_to_db): archive_and_compact just
