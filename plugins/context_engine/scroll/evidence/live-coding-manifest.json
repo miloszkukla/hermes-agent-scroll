@@ -1,7 +1,7 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "live_model": true,
-  "implementation_commit": "20e838f7246f1bdade05d82e4e0f6de2df00dc50",
+  "implementation_commit": "f30891b079308efd1c069ce42a034c48dfa92ca0",
   "plan_sha256": "7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210",
   "credential_free_manifest_sha256": "b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e",
   "agent_prompt_sha256": "fadfc8194fef35bff3fdaafcd983830bf33dab9177c831349e797159893c56d5",
@@ -14,19 +14,33 @@
   "temperature": null,
   "seed": 20260904,
   "context_window_tokens": 80000,
-  "context_total_ceiling_seconds": 1500,
-  "auxiliary_compression_timeout_seconds": 400,
-  "worker_timeout_seconds": 1650,
-  "worker_access_token_minimum_ttl_seconds": 1800,
-  "resume_attestation_sha256": "d1453c394555ebfa4ca8e89db9514cd96ff9eb75999564f4047bad6adbb62e6f",
-  "resume_source": {
-    "manifest_sha256": "d824f2f401946c5fe6d740474931fc6321400417429449bb650c90ca0f823337",
-    "implementation_commit": "a46e6727ff630dd4a0e3cb5326aeeee99cb5260e",
-    "runtime_root_name": "live-coding-gated-20260904-r4",
-    "context_total_ceiling_seconds": 900,
-    "auxiliary_compression_timeout_seconds": 300,
-    "worker_timeout_seconds": 1200,
-    "worker_access_token_minimum_ttl_seconds": 1260
+  "context_total_ceiling_seconds": 3000,
+  "auxiliary_compression_timeout_seconds": 800,
+  "worker_timeout_seconds": 3300,
+  "worker_access_token_minimum_ttl_seconds": 3500,
+  "resume_sources": {
+    "live-coding-gated-20260904-r4": {
+      "manifest_sha256": "d824f2f401946c5fe6d740474931fc6321400417429449bb650c90ca0f823337",
+      "implementation_commit": "a46e6727ff630dd4a0e3cb5326aeeee99cb5260e",
+      "runtime_root_name": "live-coding-gated-20260904-r4",
+      "context_total_ceiling_seconds": 900,
+      "auxiliary_compression_timeout_seconds": 300,
+      "worker_timeout_seconds": 1200,
+      "worker_access_token_minimum_ttl_seconds": 1260,
+      "attestation_file": "live-coding-r4-resume-attestation.json",
+      "attestation_sha256": "d1453c394555ebfa4ca8e89db9514cd96ff9eb75999564f4047bad6adbb62e6f"
+    },
+    "live-coding-gated-20260904-r5": {
+      "manifest_sha256": "d42ed46a8fe89b9835131433f54d140d2a3ccea2f0fafde330aabc48722572f3",
+      "implementation_commit": "20e838f7246f1bdade05d82e4e0f6de2df00dc50",
+      "runtime_root_name": "live-coding-gated-20260904-r5",
+      "context_total_ceiling_seconds": 1500,
+      "auxiliary_compression_timeout_seconds": 400,
+      "worker_timeout_seconds": 1650,
+      "worker_access_token_minimum_ttl_seconds": 1800,
+      "attestation_file": "live-coding-r5-resume-attestation.json",
+      "attestation_sha256": "24dce32f3e5174433d6d69aa19d92fd076df58790f8a6e7b5c150acf2b14454e"
+    }
   },
   "max_iterations": 8,
   "max_output_tokens": 4096,
@@ -55,7 +69,7 @@
     }
   ],
   "arms": {
-    "stock": "3a351969df085431c84723115301df43db4728862bd98221a57fc35d56cbd5ae",
-    "scroll": "3a351969df085431c84723115301df43db4728862bd98221a57fc35d56cbd5ae"
+    "stock": "2ba68e17fae0435817af6cc96b949733f21ed598f980b3eb6f1674f35cdefb0a",
+    "scroll": "2ba68e17fae0435817af6cc96b949733f21ed598f980b3eb6f1674f35cdefb0a"
   }
 }

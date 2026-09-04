@@ -2,7 +2,7 @@
 
 ## Status
 
-**GO — the attested replacement coding lane is authorized.** The controlled memory
+**PAUSED pending focused review for the expanded attested coding lane.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -60,13 +60,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `20e838f7246f1bdade05d82e4e0f6de2df00dc50` |
+| Coding implementation commit | `f30891b079308efd1c069ce42a034c48dfa92ca0` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding report manifest digest (canonical JSON SHA-256) | `d42ed46a8fe89b9835131433f54d140d2a3ccea2f0fafde330aabc48722572f3` |
+| Coding report manifest digest (canonical JSON SHA-256) | `a55be7bf07b5fa3716a0f1483830b24c58940142c5c16caac4f7d34d67b2146e` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -75,14 +75,16 @@ The coding report's manifest digest is SHA-256 over
 `json.dumps(manifest, sort_keys=True, separators=(',', ':'))`, matching
 `evals.scroll.coding_live`; it is not the byte hash of the pretty-printed file.
 
-The coding manifest is schema v3 and freezes a 1,500-second host ceiling,
-400-second auxiliary timeout (a 1,600-second adapter hard ceiling),
-1,650-second worker timeout, and 1,800-second OAuth lease minimum. This
+The coding manifest is schema v4 and freezes a 3,000-second host ceiling,
+800-second auxiliary timeout (a 3,200-second adapter hard ceiling),
+3,300-second worker timeout, and 3,500-second OAuth lease minimum. This
 preserves the same model, task set, input budgets, compression behavior, and
-four-worker cap for stock and Scroll. Its raw attestation hash is
-`d1453c394555ebfa4ca8e89db9514cd96ff9eb75999564f4047bad6adbb62e6f` and
-binds all 28 eligible r4 result bytes and workspace trees to the exact original
-source manifest, implementation, runtime name, and lower timeout envelope.
+four-worker cap for stock and Scroll. Its two raw attestations bind 28 eligible
+r4 rows and 54 eligible r5 rows to their exact source manifests, implementations,
+runtime names, and lower timeout envelopes. The r5 attempt produced no report:
+an actively streaming compression reached its total ceiling and then outlived
+the worker guard. Its complete results are nevertheless independently pinned;
+the single incomplete r5 row remains fresh work.
 Schema v1 is reserved for the completed memory lane; each evaluator rejects
 the other lane's schema before provenance, credential, or provider work.
 
