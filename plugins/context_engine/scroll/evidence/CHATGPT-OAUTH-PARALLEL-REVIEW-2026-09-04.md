@@ -2,7 +2,7 @@
 
 ## Status
 
-**GO for a fresh replacement coding lane.** The controlled memory
+**PAUSED pending focused review for a fresh replacement coding lane.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -44,7 +44,7 @@ raw worker results but no report: two stock compressions emitted substantive
 progress yet reached the host's 600-second total ceiling. Candidate
 `a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` freezes a 900-second coding-only
 host ceiling for both arms and binds schema v2 to coding before provenance or
-OAuth. This candidate and its revised manifest cleared focused review.
+OAuth. Its successor awaits focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -57,13 +57,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` |
+| Coding implementation commit | `2ced0b99a4aacfa106a2a0e28ee2ebae4444c25f` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding report manifest digest (canonical JSON SHA-256) | `d824f2f401946c5fe6d740474931fc6321400417429449bb650c90ca0f823337` |
+| Coding report manifest digest (canonical JSON SHA-256) | `9c9d41b8f2fbe64114c6efc7593e8f6b3ff5e99fed7369ab6021a3f57758da7e` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -72,13 +72,13 @@ The coding report's manifest digest is SHA-256 over
 `json.dumps(manifest, sort_keys=True, separators=(',', ':'))`, matching
 `evals.scroll.coding_live`; it is not the byte hash of the pretty-printed file.
 
-The coding manifest is schema v2 and freezes
-`context_total_ceiling_seconds: 900`. This preserves the same model, task set,
-input budgets, compression behavior, and four-worker cap for stock and Scroll;
-it only gives a substantively streaming long summary 50% more wall-clock time.
-The adapter retains its independent 1,200-second hard backstop. Schema v1 is
-reserved for the completed memory lane; each evaluator rejects the other lane's
-schema before provenance, credential, or provider work.
+The coding manifest is schema v3 and freezes a 1,500-second host ceiling,
+400-second auxiliary timeout (a 1,600-second adapter hard ceiling),
+1,650-second worker timeout, and 1,800-second OAuth lease minimum. This
+preserves the same model, task set, input budgets, compression behavior, and
+four-worker cap for stock and Scroll. Schema v1 is reserved for the completed
+memory lane; each evaluator rejects the other lane's schema before provenance,
+credential, or provider work.
 
 ## Route and isolation contract
 
@@ -173,6 +173,16 @@ while schema v1 reached the coding executor before its missing ceiling field
 failed. Candidate `a46e6727ff630dd4a0e3cb5326aeeee99cb5260e` resolves this by
 reserving v1 for memory and v2 for coding before provenance, credential, or
 provider work; direct regression coverage asserts both rejections.
+
+The `live-coding-gated-20260904-r4` runtime was stopped under the task owner's
+direction after 28 complete worker results and several substantively streaming
+summaries exceeded its 900-second host ceiling. It produced no report and is
+not a completed evaluation. The owner explicitly authorized reuse of only its
+complete rows to avoid re-spending the same run budget. Schema v3 names that
+runtime and prior canonical manifest digest, permits only the declared timeout
+envelope increase, verifies each deterministic job path, final result shape,
+bounded usage, scenario metric, and resulting workspace, and records every
+reused row in the final report. Incomplete r4 jobs remain excluded.
 
 ## Ceiling-schema gate
 
