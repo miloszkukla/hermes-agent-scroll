@@ -1908,7 +1908,15 @@ class _CodexCompletionsAdapter:
                 logger.debug("Codex auxiliary: cache eviction on timeout failed", exc_info=True)
 
         def _check_cancelled() -> None:
-            if total_timeout is not None and time.monotonic() >= _effective_deadline():
+            if (
+                timed_out.is_set()
+                or time.monotonic() >= _effective_deadline()
+            ):
+                if (
+                    callable(protected_cancel_check)
+                    and _captured_aux_cancel_requested(protected_cancel_check)
+                ):
+                    raise AuxiliaryExplicitCancellation()
                 if not timed_out.is_set():
                     _close_client_on_timeout()
                 raise TimeoutError(_timeout_message())
@@ -2027,14 +2035,26 @@ class _CodexCompletionsAdapter:
             ).start()
             while not stream_creation_done.wait(0.02):
                 _check_cancelled()
-            _check_cancelled()
             if "exception" in stream_creation:
+                _check_cancelled()
                 raise stream_creation["exception"]
             event_stream = stream_creation.get("stream")
             if event_stream is None:
                 raise RuntimeError("Codex auxiliary Responses stream creation returned no stream")
             with attempt_stream_lock:
                 attempt_stream.append(event_stream)
+            try:
+                _check_cancelled()
+            except BaseException:
+                close_fn = getattr(event_stream, "close", None)
+                if callable(close_fn):
+                    try:
+                        close_fn()
+                    except Exception:
+                        logger.debug("Codex auxiliary: timed-out stream close failed", exc_info=True)
+                with attempt_stream_lock:
+                    attempt_stream.clear()
+                raise
             # The timer can fire while responses.create() is blocked. If the
             # cancelled attempt had no stream to close at that instant, close it
             # now that it is safely attempt-owned; never touch the shared client.
