@@ -1,10 +1,12 @@
 """The coding lane is fixed, objective, and starts from failing workspaces."""
 
+import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
-from evals.scroll.coding_live import _items, _percentile, _resumable_coding_result, paired_bootstrap_lower_bound
+from evals.scroll.coding_live import _items, _percentile, _resume_attestation, _resumable_coding_result, paired_bootstrap_lower_bound
 from evals.scroll.coding_trajectories import CANONICAL_HISTORY_MIN_TOKENS, TRAJECTORIES, canonical_history_tokens, verify_workspace, write_workspace
 from evals.scroll.hermes_live import LiveRunError
 
@@ -49,8 +51,36 @@ def test_coding_resume_accepts_only_complete_bounded_worker_results(tmp_path, mo
     result = tmp_path / "result.json"
     result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}), encoding="utf-8")
     manifest = {"input_token_budget": 10, "output_token_budget": 10, "cache_read_token_budget": 10}
+    attestation = {"jobs": {"job": {"result_sha256": "a" * 64, "workspace_sha256": "b" * 64}}}
     monkeypatch.setattr("evals.scroll.coding_live.verify_workspace", lambda _workspace: True)
+    monkeypatch.setattr("evals.scroll.coding_live._sha256_file", lambda _path: "a" * 64)
+    monkeypatch.setattr("evals.scroll.coding_live._workspace_sha256", lambda _path: "b" * 64)
 
-    assert _resumable_coding_result(result, tmp_path / "workspace", manifest) == {"answer": "verified-pass", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "elapsed_seconds": None, "scenario_latency_seconds": 0.5, "resumed": True}
+    assert _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "job") == {"answer": "verified-pass", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "elapsed_seconds": None, "scenario_latency_seconds": 0.5, "resumed": True}
     result.write_text(json.dumps({"answer": "", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}), encoding="utf-8")
-    assert _resumable_coding_result(result, tmp_path / "workspace", manifest) is None
+    assert _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "job") is None
+
+
+def test_coding_resume_rejects_tampered_artifacts(tmp_path, monkeypatch):
+    result = tmp_path / "result.json"
+    result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}), encoding="utf-8")
+    manifest = {"input_token_budget": 10, "output_token_budget": 10, "cache_read_token_budget": 10}
+    attestation = {"jobs": {"job": {"result_sha256": "a" * 64, "workspace_sha256": "b" * 64}}}
+    monkeypatch.setattr("evals.scroll.coding_live._sha256_file", lambda _path: "c" * 64)
+
+    with pytest.raises(LiveRunError, match="does not match"):
+        _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "job")
+
+
+def test_coding_resume_attestation_binds_the_frozen_source(tmp_path, monkeypatch):
+    source = {"manifest_sha256": "a" * 64, "implementation_commit": "b" * 40, "runtime_root_name": "r4", "context_total_ceiling_seconds": 900, "auxiliary_compression_timeout_seconds": 300, "worker_timeout_seconds": 1200, "worker_access_token_minimum_ttl_seconds": 1260}
+    attestation = {"schema_version": 1, **source, "jobs": {}}
+    path = tmp_path / "attestation.json"
+    path.write_text(json.dumps(attestation), encoding="utf-8")
+    manifest = {"resume_attestation_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "resume_source": source}
+    monkeypatch.setattr("evals.scroll.coding_live._RESUME_ATTESTATION_PATH", Path("attestation.json"))
+
+    assert _resume_attestation(manifest, tmp_path) == attestation
+    manifest["resume_source"] = {**source, "worker_timeout_seconds": 1201}
+    with pytest.raises(LiveRunError, match="does not match"):
+        _resume_attestation(manifest, tmp_path)
