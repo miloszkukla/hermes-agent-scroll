@@ -34,9 +34,11 @@ closes a late-created stream, and enforces the no-progress deadline even when
 the caller does not supply an explicit timeout. Its reviewed fresh runtime then
 wrote 27 raw results before a returned Responses stream blocked in its first
 iterator read. Candidate `757e3cd37160cd942357664139041b3a756eebc8` makes the
-owner poll that consumption path at the same no-progress deadline. The previous
-GO is invalidated until this candidate and its revised manifest clear focused
-review.
+owner poll that consumption path at the same no-progress deadline. Its review
+found that the consumption daemon lost normal liveness hooks. Candidate
+`4de8745a081620b09cc854fa932a817465511a01` transfers both hooks into that
+daemon. The previous GO is invalidated until this candidate and its revised
+manifest clear focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -49,13 +51,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `757e3cd37160cd942357664139041b3a756eebc8` |
+| Coding implementation commit | `4de8745a081620b09cc854fa932a817465511a01` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding manifest SHA-256 | `2b2bdb468d75a0de3a5e0db812b2cb645224643e5c1f6a54162026a96074bf38` |
+| Coding manifest SHA-256 | `1e3e18f665bf7bdd755ef36e8b0212f223b5b6c7815c7442f30b1da180dac3b6` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -131,8 +133,10 @@ but consumed the returned stream on the owner thread, so a blocking first read
 again reached the 600-second host compression ceiling. Candidate
 `757e3cd37160cd942357664139041b3a756eebc8` moves that consumption to an
 attempt-owned daemon and polls the original no-progress deadline. Its direct
-regression covers a returned stream whose first `next()` blocks. Neither the
-46-result nor 27-result runtime will be reused.
+regression covers a returned stream whose first `next()` blocks. Focused review
+found that its daemon lost thread-local liveness and timing hooks; candidate
+`4de8745a081620b09cc854fa932a817465511a01` captures and installs both hooks
+inside the consumer. Neither the 46-result nor 27-result runtime will be reused.
 
 ## Completed memory lane
 
@@ -192,4 +196,7 @@ Disposition: **GO — no actionable P0/P1/P2.** This authorizes only a new codin
 runtime on `509393a38fe43db0f14f31e9560904a54197c039`; the 46-result
 blocked-stream runtime remains excluded. The later r2 stream-consumption
 failure supersedes this authorization and requires a focused review of
-`757e3cd37160cd942357664139041b3a756eebc8`.
+`757e3cd37160cd942357664139041b3a756eebc8`. That review returned P1/NO-GO
+because the daemon dropped normal liveness hooks. Candidate
+`4de8745a081620b09cc854fa932a817465511a01` restores them and awaits a fresh
+focused disposition.
