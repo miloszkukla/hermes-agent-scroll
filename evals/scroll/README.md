@@ -73,7 +73,8 @@ python -m evals.scroll.coding_live \
 ```
 
 The memory manifest pins the exact Scroll source revision and the upstream
-judge model. Its aggregate cost includes both Hermes arms and every judge call.
+judge model. Its aggregate cost includes both Hermes arms, any stock-compressor
+auxiliary call, and every judge call.
 The coding manifest declares `none-objective-verifier` as a non-model judge;
 its cost is solely the two agent arms. Any changed source, model, prompt,
 dataset, task set, budget, seed, or manifest requires a new review gate and a

@@ -74,6 +74,18 @@ def _history_row(session: int, date: str | None, role: str, content: str) -> dic
     return {"role": role, "content": f"{tag} {role}: {content.strip()}"}
 
 
+def _auxiliary_usage(db: Any, session_id: str) -> tuple[int, int]:
+    try:
+        with db._read_ctx() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0) "
+                "FROM session_model_usage WHERE session_id = ? AND task <> ''", (session_id,),
+            ).fetchone()
+        return int(row[0] or 0), int(row[1] or 0)
+    except Exception as exc:
+        raise LiveRunError("could not account for auxiliary evaluation usage") from exc
+
+
 def load_longmemeval_items(dataset_path: Path, identifiers: Sequence[str]) -> list[EvaluationItem]:
     records = _read_json(dataset_path)
     if not isinstance(records, list):
@@ -217,6 +229,9 @@ def _worker_result(job_path: Path) -> None:
             raise LiveRunError("Hermes evaluation arm failed before a final answer")
         input_tokens = int(getattr(agent, "session_input_tokens", 0) or 0)
         output_tokens = int(getattr(agent, "session_output_tokens", 0) or 0)
+        auxiliary_input, auxiliary_output = _auxiliary_usage(db, session_id)
+        input_tokens += auxiliary_input
+        output_tokens += auxiliary_output
         cost = input_tokens * float(job["input_price_per_token"]) + output_tokens * float(job["output_price_per_token"])
         Path(job["result_path"]).write_text(json.dumps({
             "answer": answer, "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost_usd": cost},

@@ -1,8 +1,11 @@
 """Live-evaluation loaders keep benchmark gold outside the agent probe."""
 
 import json
+from contextlib import contextmanager
 
-from evals.scroll.hermes_live import agent_prompt_sha256, load_beam_items, load_longmemeval_items
+import pytest
+
+from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 
 
 def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
@@ -43,3 +46,21 @@ def test_beam_loader_exposes_only_public_probe(tmp_path):
 def test_agent_prompt_has_a_stable_sha256():
     assert len(agent_prompt_sha256()) == 64
     assert agent_prompt_sha256() == agent_prompt_sha256()
+
+
+def test_live_worker_counts_auxiliary_compression_usage():
+    class Connection:
+        def execute(self, _query, _params):
+            return self
+
+        def fetchone(self):
+            return (12, 3)
+
+    class Database:
+        @contextmanager
+        def _read_ctx(self):
+            yield Connection()
+
+    assert _auxiliary_usage(Database(), "session") == (12, 3)
+    with pytest.raises(LiveRunError, match="auxiliary"):
+        _auxiliary_usage(object(), "session")
