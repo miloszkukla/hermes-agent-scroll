@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "live_model": true,
-  "implementation_commit": "b6dd0b0a1e200ac6257f28799480944a5061c2b8",
+  "implementation_commit": "af1d5edc1dfbfa8da94cd07f573fcaef58edef02",
   "plan_sha256": "7031dc9351254dd2846f1471f958b32b9b1ecbca112352d3ca047260a5cd8210",
   "credential_free_manifest_sha256": "b8356f7971b9a0c16d33f564c84e39d194fc55d2f6308de4f55a5448ab9f536e",
   "agent_prompt_sha256": "fadfc8194fef35bff3fdaafcd983830bf33dab9177c831349e797159893c56d5",

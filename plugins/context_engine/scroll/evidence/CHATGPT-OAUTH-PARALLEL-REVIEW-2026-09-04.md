@@ -18,12 +18,12 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `b6dd0b0a1e200ac6257f28799480944a5061c2b8` |
+| Implementation commit | `af1d5edc1dfbfa8da94cd07f573fcaef58edef02` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
-| Memory manifest SHA-256 | `af4fc55281d7abc60e15fa1b471b301a14496d7c2ee0f54a779c348212db6607` |
-| Coding manifest SHA-256 | `5e11cabb3d7529662f2532af105d4d4e64ac46ce7678be682b9a2cf0a9120a67` |
+| Memory manifest SHA-256 | `9c9efd181df0e276a5f998dc1eb31ac6b2750bcc9074c294044671e641117a6a` |
+| Coding manifest SHA-256 | `450a5e6eed5c81feb6582e953684a18e7600173ff1bc48fcf73eff338644e4f3` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -40,9 +40,10 @@ statistics. It is not sent to the Codex Responses transport.
   owner-only and the one-use lease file is owner-read/write only; a worker
   unlinks it before constructing the agent.
 - Auxiliary compression is explicitly configured for the same Codex route and
-  model and uses the already leased access token rather than resolving a
-  credential store. Session accounting rejects an auxiliary call using another
-  provider or model.
+  model. When that configured route matches the main route, auxiliary routing
+  inherits the already leased access token rather than resolving a credential
+  store. Session accounting rejects an auxiliary call using another provider or
+  model.
 - Coding workers expose only terminal, process, and local file-editing tools;
   they cannot call vision, browser vision, or delegation. Their isolated config
   disables smart approval, avoiding its auxiliary-model route.
@@ -72,7 +73,7 @@ estimator was invalid.
 ## Verification and independent disposition
 
 - `pytest -q tests/evals/test_scroll_hermes_live.py tests/evals/test_scroll_coding_trajectories.py tests/evals/test_scroll_paired_runner.py tests/evals/test_scroll_live_manifest.py tests/plugins/test_scroll_documentation.py tests/agent/test_auxiliary_client.py::TestBuildCodexClient tests/agent/test_codex_cloudflare_headers.py`
-  — 47 passed.
+  — 48 passed.
 - `ruff check agent/auxiliary_client.py evals/scroll/hermes_live.py
   evals/scroll/coding_live.py tests/evals/test_scroll_hermes_live.py
   tests/agent/test_auxiliary_client.py tests/agent/test_codex_cloudflare_headers.py`
