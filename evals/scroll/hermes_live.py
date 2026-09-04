@@ -94,7 +94,10 @@ def _write_private_json(path: Path, value: Mapping[str, Any]) -> None:
             os.fchmod(handle.fileno(), 0o600)
             handle.write(json.dumps(value))
     except OSError as exc:
-        path.unlink(missing_ok=True)
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
         raise LiveRunError(f"could not write private evaluation input {path}") from exc
 
 
