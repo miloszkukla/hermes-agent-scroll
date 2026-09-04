@@ -37,8 +37,10 @@ iterator read. Candidate `757e3cd37160cd942357664139041b3a756eebc8` makes the
 owner poll that consumption path at the same no-progress deadline. Its review
 found that the consumption daemon lost normal liveness hooks. Candidate
 `4de8745a081620b09cc854fa932a817465511a01` transfers both hooks into that
-daemon. The previous GO is invalidated until this candidate and its revised
-manifest clear focused review.
+daemon. Its review found that protected cancellation then closed an orphaned
+stream too early. Candidate `2556eb457db6a682dc1e8ceb25f06bf409532e78`
+retains timer-scoped orphan cleanup. The previous GO is invalidated until this
+candidate and its revised manifest clear focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -51,13 +53,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `4de8745a081620b09cc854fa932a817465511a01` |
+| Coding implementation commit | `2556eb457db6a682dc1e8ceb25f06bf409532e78` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding manifest SHA-256 | `1e3e18f665bf7bdd755ef36e8b0212f223b5b6c7815c7442f30b1da180dac3b6` |
+| Coding manifest SHA-256 | `67228f5a0c6aacc6eb65c909880f1b3803e0121976a02f2b2b6c8999775fe82e` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -136,7 +138,10 @@ attempt-owned daemon and polls the original no-progress deadline. Its direct
 regression covers a returned stream whose first `next()` blocks. Focused review
 found that its daemon lost thread-local liveness and timing hooks; candidate
 `4de8745a081620b09cc854fa932a817465511a01` captures and installs both hooks
-inside the consumer. Neither the 46-result nor 27-result runtime will be reused.
+inside the consumer. Its review found that protected cancellation then closed an
+orphaned stream too early; candidate
+`2556eb457db6a682dc1e8ceb25f06bf409532e78` leaves it to attempt-timer cleanup.
+Neither the 46-result nor 27-result runtime will be reused.
 
 ## Completed memory lane
 
@@ -199,4 +204,7 @@ failure supersedes this authorization and requires a focused review of
 `757e3cd37160cd942357664139041b3a756eebc8`. That review returned P1/NO-GO
 because the daemon dropped normal liveness hooks. Candidate
 `4de8745a081620b09cc854fa932a817465511a01` restores them and awaits a fresh
-focused disposition.
+focused disposition. That review returned P1/NO-GO because protected
+cancellation closed an orphaned stream before its timer-scoped cleanup; candidate
+`2556eb457db6a682dc1e8ceb25f06bf409532e78` restores that contract and awaits a
+fresh focused disposition.
