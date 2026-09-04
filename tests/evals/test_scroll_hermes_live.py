@@ -119,7 +119,7 @@ def test_tracked_dirty_source_checkout_is_rejected(tmp_path):
     git("config", "user.email", "eval@example.invalid")
     git("config", "user.name", "Scroll evaluation")
     tracked = tmp_path / "tracked.txt"
-    tracked.write_text("clean\n", encoding="utf-8")
+    tracked.write_text("committed change\n", encoding="utf-8")
     git("add", "tracked.txt")
     git("commit", "-m", "fixture")
     _require_clean_git_checkout(tmp_path, "fixture")
@@ -129,6 +129,8 @@ def test_tracked_dirty_source_checkout_is_rejected(tmp_path):
     tracked.write_text("clean\n", encoding="utf-8")
     git("add", "tracked.txt")
     git("commit", "-m", "clean fixture")
-    (tmp_path / "scroll_eval").mkdir()
+    shadow = tmp_path / "scroll_eval"
+    shadow.mkdir()
+    (shadow / "__init__.py").write_text("", encoding="utf-8")
     with pytest.raises(LiveRunError, match="untracked files"):
         _require_clean_git_checkout(tmp_path, "fixture", allow_untracked=False)
