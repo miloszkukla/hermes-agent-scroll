@@ -24,6 +24,17 @@ def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
     assert item.history[0]["content"].startswith("[Session 1 | 2025-01-02] user:")
 
 
+def test_longmemeval_loader_retains_non_string_gold_values(tmp_path):
+    dataset = tmp_path / "longmemeval_s"
+    dataset.write_text(json.dumps([{
+        "question_id": "case-2", "question_type": "single-session-user", "question": "How many?",
+        "answer": 4, "haystack_dates": ["2025/1/2"],
+        "haystack_sessions": [[{"role": "user", "content": "There are four."}]],
+    }]), encoding="utf-8")
+
+    assert load_longmemeval_items(dataset, ["longmemeval/case-2"])[0].gold["answer"] == 4
+
+
 def test_beam_loader_exposes_only_public_probe(tmp_path):
     root = tmp_path / "100K" / "1"
     (root / "probing_questions").mkdir(parents=True)

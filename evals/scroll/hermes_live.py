@@ -110,7 +110,7 @@ def load_longmemeval_items(dataset_path: Path, identifiers: Sequence[str]) -> li
         question = row.get("question")
         question_type = row.get("question_type")
         answer = row.get("answer")
-        if not all(isinstance(value, str) and value for value in (question, question_type, answer)) or not history:
+        if not all(isinstance(value, str) and value for value in (question, question_type)) or answer is None or not history:
             raise LiveRunError(f"LongMemEval item is incomplete: {identifier}")
         result.append(EvaluationItem(
             identifier, "longmemeval", question_type, question, tuple(history),
