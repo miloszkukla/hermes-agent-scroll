@@ -6,7 +6,9 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import random
+import shutil
 import subprocess
 import sys
 import time
@@ -75,6 +77,22 @@ def paired_bootstrap_lower_bound(deltas: list[float], *, seed: int, resamples: i
     return means[max(0, math.ceil(0.05 * resamples) - 1)]
 
 
+def _sandboxed_worker_command(job_root: Path, job_path: Path, workspace: Path) -> tuple[list[str], dict[str, str]]:
+    bwrap = shutil.which("bwrap")
+    if bwrap is None:
+        raise LiveRunError("coding evaluation requires bubblewrap")
+    repository_root = Path(__file__).resolve().parents[2]
+    environment = os.environ.copy()
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    environment["PYTHONPATH"] = os.pathsep.join(filter(None, (str(repository_root), environment.get("PYTHONPATH"))))
+    return [
+        bwrap, "--die-with-parent", "--new-session", "--unshare-pid",
+        "--ro-bind", "/", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
+        "--bind", str(job_root), str(job_root), "--chdir", str(workspace),
+        sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(job_path),
+    ], environment
+
+
 def run_coding_evaluation(
     manifest_path: Path, *, runtime_root: Path, output_path: Path,
     credential_home: Path = Path.home() / ".hermes",
@@ -106,7 +124,8 @@ def run_coding_evaluation(
         }), encoding="utf-8")
         started = time.monotonic()
         try:
-            subprocess.run([sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(job_path)], cwd=Path(__file__).resolve().parents[2], check=True, capture_output=True, text=True, timeout=1_200)
+            command, environment = _sandboxed_worker_command(job_root, job_path, workspace)
+            subprocess.run(command, cwd=workspace, env=environment, check=True, capture_output=True, text=True, timeout=1_200)
             result = json.loads(result_path.read_text(encoding="utf-8"))
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
             raise LiveRunError(f"Hermes {arm} coding arm failed for {item.identifier}") from exc

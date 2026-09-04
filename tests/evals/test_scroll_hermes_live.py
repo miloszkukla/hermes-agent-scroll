@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from evals.scroll.coding_live import _sandboxed_worker_command
 from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _bind_worker_oauth, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _prepare_coding_scenario, _require_clean_git_checkout, _worker_config, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 from toolsets import resolve_toolset
 
@@ -141,6 +142,48 @@ def test_coding_workspace_is_registered_for_the_worker_task(tmp_path, monkeypatc
 
     assert os.environ["TERMINAL_CWD"] == str(tmp_path)
     assert registrations == [("worker-session", {"cwd": str(tmp_path)})]
+
+
+def test_coding_worker_command_makes_only_its_job_tree_writable(tmp_path, monkeypatch):
+    job_root = tmp_path / "job"
+    workspace = job_root / "workspace"
+    job_path = job_root / "job.json"
+    workspace.mkdir(parents=True)
+    monkeypatch.setattr("evals.scroll.coding_live.shutil.which", lambda name: "/usr/bin/bwrap" if name == "bwrap" else None)
+
+    command, environment = _sandboxed_worker_command(job_root, job_path, workspace)
+
+    assert command[:13] == ["/usr/bin/bwrap", "--die-with-parent", "--new-session", "--unshare-pid", "--ro-bind", "/", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
+    assert command[13:18] == ["--bind", str(job_root), str(job_root), "--chdir", str(workspace)]
+    assert command[-4:] == ["-m", "evals.scroll.hermes_live", "--worker", str(job_path)]
+    assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert str(Path.cwd()) in environment["PYTHONPATH"]
+
+
+def test_coding_worker_command_requires_bubblewrap(tmp_path, monkeypatch):
+    monkeypatch.setattr("evals.scroll.coding_live.shutil.which", lambda _name: None)
+
+    with pytest.raises(LiveRunError, match="bubblewrap"):
+        _sandboxed_worker_command(tmp_path, tmp_path / "job.json", tmp_path)
+
+
+def test_coding_worker_sandbox_blocks_checkout_writes(tmp_path):
+    job_root = tmp_path / "job"
+    workspace = job_root / "workspace"
+    job_path = job_root / "job.json"
+    workspace.mkdir(parents=True)
+    command, environment = _sandboxed_worker_command(job_root, job_path, workspace)
+    environment["SCROLL_EVAL_CHECKOUT_PATH"] = str(Path(__file__).resolve().parents[2] / "PLAN.md")
+    program = (
+        "from pathlib import Path; import os; "
+        "Path('allowed').write_text('ok'); "
+        "checkout = Path(os.environ['SCROLL_EVAL_CHECKOUT_PATH']); "
+        "\nif os.access(checkout, os.W_OK):\n raise RuntimeError('sandbox allowed a checkout write')"
+    )
+
+    subprocess.run([*command[:-4], "-c", program], check=True, capture_output=True, text=True, env=environment)
+
+    assert (workspace / "allowed").read_text(encoding="utf-8") == "ok"
 
 
 def test_coding_scenarios_drive_manual_selection_and_cold_rebuild(tmp_path):
