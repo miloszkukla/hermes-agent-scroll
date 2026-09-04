@@ -2,13 +2,17 @@
 
 ## Status
 
-**GO — independent review completed.** Reviewer `/root/final_fresh_review`
-approved implementation commit `490e6417886933550f3bb45e00cf29b5fcbffb31`
-after verifying parent-only OAuth leasing, matched-route auxiliary inheritance,
-the four-worker cap/order, protected lease files, Bubblewrap containment and
-DNS, and manifest provenance. The prior OAuth candidate was stopped and
-excluded when a coding worker issued an absolute `cd` into the checkout. Its
-partial results are not accepted; its one checkout mutation was restored.
+**Focused review pending.** Reviewer `/root/final_fresh_review` approved
+implementation commit `490e6417886933550f3bb45e00cf29b5fcbffb31` after
+verifying parent-only OAuth leasing, matched-route auxiliary inheritance, the
+four-worker cap/order, protected lease files, Bubblewrap containment and DNS,
+and manifest provenance. A preflight run then established that this account's
+valid OAuth credentials reside in Hermes's supported `credential_pool` layout,
+not the singleton store. The follow-up accepts only a parent-held pool access
+token with the same 21-minute headroom; it requires focused approval before a
+live lane is restarted. The prior OAuth candidate was stopped and excluded
+when a coding worker issued an absolute `cd` into the checkout. Its partial
+results are not accepted; its one checkout mutation was restored.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
 owner selected the ChatGPT subscription. Its unaccepted partial OpenRouter
@@ -35,12 +39,14 @@ statistics. It is not sent to the Codex Responses transport.
 - The primary agent uses `openai-codex` with `codex_responses`, the exact
   declared model, and `fallback_model=[]`; a worker rejects a resolved route
   that differs.
-- The parent alone resolves and refreshes the caller's OAuth store under the
-  Hermes auth lock. Before launching a bounded worker or judge, it leases a
-  ChatGPT Codex access token with 21 minutes of refresh headroom. Workers and
-  judges receive no `auth.json` or refresh token. Runtime/job directories are
-  owner-only and the one-use lease file is owner-read/write only; a worker
-  unlinks it before constructing the agent.
+- The parent alone resolves and refreshes the caller's OAuth credentials under
+  the Hermes auth lock. Before launching a bounded worker or judge, it leases
+  a ChatGPT Codex access token with 21 minutes of refresh headroom. The
+  supported singleton store and credential-pool layouts are both parent-only;
+  a pool lease must already meet that headroom. Workers and judges receive no
+  `auth.json` or refresh token. Runtime/job directories are owner-only and the
+  one-use lease file is owner-read/write only; a worker unlinks it before
+  constructing the agent.
 - Auxiliary compression is explicitly configured for the same Codex route and
   model. When that configured route matches the main route, auxiliary routing
   inherits the already leased access token rather than resolving a credential

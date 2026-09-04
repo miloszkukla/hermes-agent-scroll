@@ -106,9 +106,18 @@ def test_parent_leases_worker_access_tokens_with_refresh_headroom(tmp_path):
     assert calls == [{"refresh_if_expiring": True, "refresh_skew_seconds": 1_260}]
 
 
+def test_parent_leases_worker_access_tokens_from_the_credential_pool(tmp_path):
+    assert _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential_pool", "api_key": "leased-token"}, lambda *_args: False) == "leased-token"
+
+
+def test_parent_rejects_expiring_credential_pool_lease(tmp_path):
+    with pytest.raises(LiveRunError, match="expires"):
+        _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential_pool", "api_key": "token"}, lambda *_args: True)
+
+
 def test_parent_rejects_non_store_worker_access_token_sources(tmp_path):
     with pytest.raises(LiveRunError, match="parent-managed"):
-        _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential-pool", "api_key": "token"})
+        _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "worker-supplied", "api_key": "token"})
 
 
 def test_private_worker_input_has_owner_only_modes(tmp_path):

@@ -345,21 +345,26 @@ def _require_chatgpt_codex_oauth(hermes_home: Path) -> None:
         raise LiveRunError("ChatGPT Codex OAuth credential is unavailable")
 
 
-def _lease_chatgpt_codex_access_token(hermes_home: Path, resolver: Any = None) -> str:
+def _lease_chatgpt_codex_access_token(hermes_home: Path, resolver: Any = None, token_is_expiring: Any = None) -> str:
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
-    from hermes_cli.auth import resolve_codex_runtime_credentials
+    from hermes_cli.auth import _codex_access_token_is_expiring, resolve_codex_runtime_credentials
 
     token = set_hermes_home_override(hermes_home)
     try:
         credentials = (resolver or resolve_codex_runtime_credentials)(refresh_if_expiring=True, refresh_skew_seconds=_WORKER_ACCESS_TOKEN_MINIMUM_TTL_SECONDS)
     finally:
         reset_hermes_home_override(token)
-    if credentials.get("source") != "hermes-auth-store":
-        raise LiveRunError("evaluation requires a parent-managed ChatGPT Codex OAuth store")
     api_key = credentials.get("api_key")
     if not isinstance(api_key, str) or not api_key.strip():
         raise LiveRunError("parent-managed ChatGPT Codex OAuth lease is unavailable")
-    return api_key.strip()
+    api_key = api_key.strip()
+    source = credentials.get("source")
+    if source == "credential_pool":
+        if (token_is_expiring or _codex_access_token_is_expiring)(api_key, _WORKER_ACCESS_TOKEN_MINIMUM_TTL_SECONDS):
+            raise LiveRunError("parent-managed ChatGPT Codex credential-pool lease expires before the worker minimum")
+    elif source != "hermes-auth-store":
+        raise LiveRunError("evaluation requires a parent-managed ChatGPT Codex OAuth store or credential pool")
+    return api_key
 
 
 def _isolated_subprocess_environment() -> dict[str, str]:
