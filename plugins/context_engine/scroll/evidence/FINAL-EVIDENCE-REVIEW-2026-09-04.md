@@ -2,12 +2,11 @@
 
 ## Status
 
-**APPROVED by independent final evidence review.** The reviewer verified the
-warm-selection artifact and its hashes, all 30 unique task/repeat samples,
-manifest and implementation bindings, runtime metadata, percentile calculation,
-and the retained broader host-compaction result. A fresh credential-free runner
-execution also passed the warm-selection gate; the focused evaluator suite had
-45 passing tests. This record makes no paper-equivalence claim.
+**SUPERSEDED pending a current memory-lane rerun.** The former approval verified
+the coding lane and warm-selection artifact, but the completed memory lane was
+bound to `8c32e5e…`, before later `agent/auxiliary_client.py` changes. The new
+`live-memory-rerun-20260905-manifest.json` binds the same frozen data and prompt
+to `5d8cd7a…`; only results attested to that manifest may restore approval.
 
 ## Frozen inputs and reports
 
