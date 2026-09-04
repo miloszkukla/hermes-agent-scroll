@@ -18,12 +18,12 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `e86ac536405c30421e784e70d48c8b3fbecee00f` |
+| Implementation commit | `ff21affcfc09f0371392186a02b941537eb50713` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
-| Memory manifest SHA-256 | `f7fd216a958b3f47cb95cebefa589ab4f73a8abd37bfc55c04621513edc159f4` |
-| Coding manifest SHA-256 | `a26a630ceac40d89417f50afe843c02f5835ba4e9d772b17cd0d4e361dd080e5` |
+| Memory manifest SHA-256 | `337e1827ebbc0bf14116cd8109e5e022825c361fe0678959f2562419e650224f` |
+| Coding manifest SHA-256 | `d0ead17e87d577dab089a0e9a01ce68d7085df19fbbd3e74142d134753b891c5` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -33,22 +33,27 @@ statistics. It is not sent to the Codex Responses transport.
 - The primary agent uses `openai-codex` with `codex_responses`, the exact
   declared model, and `fallback_model=[]`; a worker rejects a resolved route
   that differs.
-- Each worker has an isolated `HERMES_HOME` and a symlink to the caller's
-  `auth.json`, not a copied credential. It must resolve a logged-in ChatGPT
-  Codex OAuth credential before starting.
+- The parent alone resolves and refreshes the caller's OAuth store under the
+  Hermes auth lock. Before launching a bounded worker or judge, it leases a
+  ChatGPT Codex access token with 21 minutes of refresh headroom. Workers and
+  judges receive no `auth.json` or refresh token; a worker unlinks its one-use
+  lease file before constructing the agent.
 - Auxiliary compression is explicitly configured for the same Codex route and
-  model. Session accounting rejects an auxiliary call using another provider or
-  model.
+  model and uses the already leased access token rather than resolving a
+  credential store. Session accounting rejects an auxiliary call using another
+  provider or model.
 - Coding workers expose only terminal, process, and local file-editing tools;
   they cannot call vision, browser vision, or delegation. Their isolated config
   disables smart approval, avoiding its auxiliary-model route.
-- Coding workers run inside Bubblewrap with a read-only host filesystem, a
-  writable bind mount only for that worker's job tree, a private `/tmp`, and
-  their task workspace as the initial working directory. An absolute `cd` can
-  no longer mutate the checkout or another worker's files.
-- The pinned-source memory judge receives the caller's `HERMES_HOME` and the
-  Hermes source path explicitly. It resolves its client through the same Codex
-  OAuth route rather than an OpenRouter or direct API-key client.
+- Coding workers run inside Bubblewrap with explicit read-only system and
+  source mounts, an empty `/home`, a sanitized environment, a private `/tmp`,
+  and a writable bind mount only for that worker's job tree at `/work`. Their
+  task workspace is the initial working directory. An absolute `cd` can no
+  longer mutate the checkout, another worker's files, or inspect the caller's
+  Hermes home.
+- The pinned-source memory judge uses an empty temporary `HERMES_HOME` and its
+  leased Codex access token. It has no caller auth store or inherited provider
+  environment.
 
 ## Bounded parallelism contract
 
@@ -65,10 +70,11 @@ estimator was invalid.
 
 ## Verification and independent disposition
 
-- `pytest -q tests/evals/test_scroll_hermes_live.py tests/evals/test_scroll_paired_runner.py tests/evals/test_scroll_live_manifest.py tests/plugins/test_scroll_documentation.py`
-  — 40 passed.
-- `ruff check evals/scroll tests/evals/test_scroll_paired_runner.py
-  tests/evals/test_scroll_live_manifest.py tests/evals/test_scroll_hermes_live.py`
+- `pytest -q tests/evals/test_scroll_hermes_live.py tests/evals/test_scroll_coding_trajectories.py tests/evals/test_scroll_paired_runner.py tests/evals/test_scroll_live_manifest.py tests/plugins/test_scroll_documentation.py tests/agent/test_auxiliary_client.py::TestBuildCodexClient tests/agent/test_codex_cloudflare_headers.py`
+  — 45 passed.
+- `ruff check agent/auxiliary_client.py evals/scroll/hermes_live.py
+  evals/scroll/coding_live.py tests/evals/test_scroll_hermes_live.py
+  tests/agent/test_auxiliary_client.py tests/agent/test_codex_cloudflare_headers.py`
   — passed.
 - Both live manifests validate through `validate_live_manifest()` and contain
   no credential field.
