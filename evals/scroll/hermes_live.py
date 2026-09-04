@@ -292,6 +292,15 @@ def verify_memory_inputs(manifest: Mapping[str, Any], longmemeval_path: Path, be
         raise LiveRunError("LongMemEval corpus hash does not match the live manifest")
 
 
+def _build_live_agent(factory: Any, job: Mapping[str, Any], session_id: str, db: Any, toolsets: list[str]) -> Any:
+    return factory(
+        provider="openrouter", api_mode="chat_completions", model=job["model"], session_id=session_id, session_db=db,
+        enabled_toolsets=toolsets, quiet_mode=True, skip_context_files=True, skip_memory=True,
+        skip_background_review=True, platform="cli", max_iterations=int(job["max_iterations"]),
+        max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False}, request_overrides={"seed": job["seed"]},
+    )
+
+
 def _worker_result(job_path: Path) -> None:
     job = _read_json(job_path)
     runtime_home = Path(job["runtime_home"])
@@ -336,13 +345,7 @@ def _worker_result(job_path: Path) -> None:
     agent = None
     try:
         def build_agent():
-            return AIAgent(
-                provider="openrouter", model=job["model"], session_id=session_id, session_db=db,
-                enabled_toolsets=toolsets, quiet_mode=True, skip_context_files=True, skip_memory=True,
-                skip_background_review=True, platform="cli", max_iterations=int(job["max_iterations"]),
-                max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False},
-                request_overrides={"seed": job["seed"]},
-            )
+            return _build_live_agent(AIAgent, job, session_id, db, toolsets)
 
         agent = build_agent()
         scenario_latency_seconds = 0.0

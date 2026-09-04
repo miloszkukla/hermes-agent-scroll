@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, _enabled_toolsets, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, _build_live_agent, _enabled_toolsets, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 
 
 def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
@@ -76,6 +76,14 @@ def test_live_worker_counts_auxiliary_compression_usage():
     assert _auxiliary_usage(Database(), "session") == (12, 3)
     with pytest.raises(LiveRunError, match="auxiliary"):
         _auxiliary_usage(object(), "session")
+
+
+def test_live_agent_uses_openrouter_chat_completions_for_seeded_runs():
+    captured = _build_live_agent(lambda **kwargs: kwargs, {"model": "openai/gpt-5.6-luna", "max_iterations": 8, "max_output_tokens": 4096, "seed": 20260904}, "session", object(), ["coding"])
+
+    assert captured["provider"] == "openrouter"
+    assert captured["api_mode"] == "chat_completions"
+    assert captured["request_overrides"] == {"seed": 20260904}
 
 
 def test_coding_scenarios_drive_manual_selection_and_cold_rebuild(tmp_path):
