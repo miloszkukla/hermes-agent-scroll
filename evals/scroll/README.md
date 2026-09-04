@@ -60,11 +60,12 @@ caller's Hermes home at run time. The parent alone resolves and refreshes the
 OAuth store, then gives each worker a short-lived access-token lease with enough
 life for its bounded subprocess. Workers and judges never receive `auth.json` or
 a refresh token; the worker deletes its one-use lease file before model tools
-begin. Coding workers run with a sanitized environment, an empty sandboxed
-`/home`, and explicit read-only system/source mounts plus their writable job
-tree. Raw corpus histories, model answers, generated workspaces, and provider
-traces stay below the ignored runtime root. A durable report has only
-manifest/hash metadata, objective scores, usage, and answer digests.
+begin. Runtime/job directories are owner-only and the one-use job file is
+owner-read/write only. Coding workers run with a sanitized environment, an empty
+sandboxed `/home`, and explicit read-only system/source mounts plus their
+writable job tree. Raw corpus histories, model answers, generated workspaces,
+and provider traces stay below the ignored runtime root. A durable report has
+only manifest/hash metadata, objective scores, usage, and answer digests.
 
 After a recorded `GO`, run the reviewed commands from the repository root:
 

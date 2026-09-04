@@ -2,14 +2,16 @@
 
 import json
 import os
+import stat
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from evals.scroll.coding_live import _sandboxed_worker_command
-from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _lease_chatgpt_codex_access_token, _prepare_coding_scenario, _require_clean_git_checkout, _worker_config, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _lease_chatgpt_codex_access_token, _prepare_coding_scenario, _require_clean_git_checkout, _secure_directory, _worker_config, _write_private_json, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 from toolsets import resolve_toolset
 
 
@@ -87,6 +89,7 @@ def test_live_agent_uses_a_parent_leased_chatgpt_codex_token_without_fallback():
 
     assert captured["provider"] == "openai-codex"
     assert captured["api_key"] == "leased-token"
+    assert captured["base_url"] == "https://chatgpt.com/backend-api/codex"
     assert captured["api_mode"] == "codex_responses"
     assert captured["fallback_model"] == []
     assert "request_overrides" not in captured
@@ -106,6 +109,32 @@ def test_parent_leases_worker_access_tokens_with_refresh_headroom(tmp_path):
 def test_parent_rejects_non_store_worker_access_token_sources(tmp_path):
     with pytest.raises(LiveRunError, match="parent-managed"):
         _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential-pool", "api_key": "token"})
+
+
+def test_private_worker_input_has_owner_only_modes(tmp_path):
+    runtime_root = tmp_path / "runtime"
+    job_root = runtime_root / "jobs" / "job"
+    _secure_directory(runtime_root)
+    _secure_directory(runtime_root / "jobs")
+    _secure_directory(job_root)
+    _write_private_json(job_root / "job.json", {"api_key": "leased-token"})
+
+    assert stat.S_IMODE(runtime_root.stat().st_mode) == 0o700
+    assert stat.S_IMODE(job_root.stat().st_mode) == 0o700
+    assert stat.S_IMODE((job_root / "job.json").stat().st_mode) == 0o600
+
+
+def test_live_agent_build_uses_the_lease_without_auth_store_resolution():
+    from run_agent import AIAgent
+
+    job = {"api_key": "leased-token", "model": "gpt-5.6-luna", "max_iterations": 8, "max_output_tokens": 4096}
+    with patch("run_agent.OpenAI", return_value=MagicMock()) as mock_openai, patch("agent.auxiliary_client.resolve_provider_client", side_effect=AssertionError("auth store should not run")):
+        agent = _build_live_agent(AIAgent, job, "session", MagicMock(), [])
+    try:
+        assert mock_openai.call_args.kwargs["api_key"] == "leased-token"
+        assert mock_openai.call_args.kwargs["base_url"] == "https://chatgpt.com/backend-api/codex"
+    finally:
+        agent.close()
 
 
 def test_worker_config_pins_compression_and_disables_smart_approval():

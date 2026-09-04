@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .coding_trajectories import CANONICAL_HISTORY_MIN_TOKENS, TRAJECTORIES, by_identifier, canonical_history_tokens, verify_workspace, write_workspace
-from .hermes_live import LiveRunError, _lease_chatgpt_codex_access_token, _require_chatgpt_codex_oauth, coding_prompt_sha256, verify_manifest_provenance
+from .hermes_live import LiveRunError, _lease_chatgpt_codex_access_token, _require_chatgpt_codex_oauth, _secure_directory, _write_private_json, coding_prompt_sha256, verify_manifest_provenance
 from .live_manifest import validate_live_manifest
 
 
@@ -118,22 +118,24 @@ def run_coding_evaluation(
     _require_chatgpt_codex_oauth(credential_home)
     items = _items(manifest)
     scenarios = {item.identifier: item.scenario for item in items}
-    runtime_root.mkdir(parents=True, exist_ok=True)
     runtime_root = runtime_root.resolve()
+    _secure_directory(runtime_root)
+    _secure_directory(runtime_root / "jobs")
 
     def execute(arm: str, item, repeat: int) -> Mapping[str, Any]:
         probe = {"id": item.identifier, "type": item.category, "question": item.prompt}
         job_root = runtime_root / "jobs" / hashlib.sha256(f"{arm}:{item.identifier}:{repeat}".encode()).hexdigest()
         workspace = job_root / "workspace"
         write_workspace(item, workspace)
+        _secure_directory(job_root)
         result_path = job_root / "result.json"
         job_path = job_root / "job.json"
-        job_path.write_text(json.dumps({
+        _write_private_json(job_path, {
             "lane": "coding", "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
             "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
             "history": item.history(), "probe": dict(probe), "scenario": item.scenario, "runtime_home": str(_SANDBOX_JOB_ROOT / "home"), "workspace": str(_SANDBOX_JOB_ROOT / "workspace"),
             "api_key": _lease_chatgpt_codex_access_token(credential_home), "result_path": str(_SANDBOX_JOB_ROOT / "result.json"),
-        }), encoding="utf-8")
+        })
         started = time.monotonic()
         try:
             command, environment = _sandboxed_worker_command(job_root, job_path, workspace)
@@ -141,6 +143,8 @@ def run_coding_evaluation(
             result = json.loads(result_path.read_text(encoding="utf-8"))
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
             raise LiveRunError(f"Hermes {arm} coding arm failed for {item.identifier}") from exc
+        finally:
+            job_path.unlink(missing_ok=True)
         if not isinstance(result, dict) or not isinstance(result.get("answer"), str) or not isinstance(result.get("usage"), dict):
             raise LiveRunError(f"Hermes {arm} coding arm produced an invalid result")
         scenario_latency = result.get("scenario_latency_seconds")

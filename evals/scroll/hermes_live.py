@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from agent.codex_headers import CODEX_AUX_BASE_URL
 from .beam import iter_turns, to_iso_date as beam_date
 from .live_manifest import validate_live_manifest
 from .longmemeval import to_iso_date as longmemeval_date
@@ -73,6 +74,28 @@ def _read_json(path: Path) -> Any:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise LiveRunError(f"could not read evaluation input {path}") from exc
+
+
+def _secure_directory(path: Path) -> None:
+    try:
+        path.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path.chmod(0o700)
+        if not path.is_dir() or path.stat().st_mode & 0o077:
+            raise OSError("directory permissions are not owner-only")
+    except OSError as exc:
+        raise LiveRunError(f"could not secure evaluation runtime directory {path}") from exc
+
+
+def _write_private_json(path: Path, value: Mapping[str, Any]) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            os.fchmod(handle.fileno(), 0o600)
+            handle.write(json.dumps(value))
+    except OSError as exc:
+        path.unlink(missing_ok=True)
+        raise LiveRunError(f"could not write private evaluation input {path}") from exc
 
 
 def _sha256(path: Path) -> str:
@@ -299,7 +322,7 @@ def verify_memory_inputs(manifest: Mapping[str, Any], longmemeval_path: Path, be
 
 def _build_live_agent(factory: Any, job: Mapping[str, Any], session_id: str, db: Any, toolsets: list[str]) -> Any:
     return factory(
-        provider="openai-codex", api_key=job["api_key"], api_mode="codex_responses", model=job["model"], session_id=session_id, session_db=db,
+        provider="openai-codex", api_key=job["api_key"], base_url=CODEX_AUX_BASE_URL, api_mode="codex_responses", model=job["model"], session_id=session_id, session_db=db,
         enabled_toolsets=toolsets, quiet_mode=True, skip_context_files=True, skip_memory=True,
         skip_background_review=True, platform="cli", max_iterations=int(job["max_iterations"]),
         max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False}, fallback_model=[],
@@ -562,27 +585,31 @@ def run_live_evaluation(
     by_id = {item.identifier: item for item in items}
     if len(by_id) != len(items):
         raise LiveRunError("live manifest item ids are not globally unique")
-    runtime_root.mkdir(parents=True, exist_ok=True)
+    runtime_root = runtime_root.resolve()
+    _secure_directory(runtime_root)
+    _secure_directory(runtime_root / "jobs")
 
     def execute(arm: str, probe: Mapping[str, str]) -> Mapping[str, Any]:
         item = by_id.get(probe["id"])
         if item is None or item.public_probe != dict(probe):
             raise LiveRunError("executor received an unfrozen model probe")
         job_root = runtime_root / "jobs" / hashlib.sha256(f"{arm}:{item.identifier}".encode()).hexdigest()
-        job_root.mkdir(parents=True, exist_ok=True)
+        _secure_directory(job_root)
         result_path = job_root / "result.json"
         job_path = job_root / "job.json"
-        job_path.write_text(json.dumps({
+        _write_private_json(job_path, {
             "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
             "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
             "history": item.history, "probe": item.public_probe, "runtime_home": str(job_root / "home"),
             "api_key": _lease_chatgpt_codex_access_token(credential_home), "result_path": str(result_path),
-        }), encoding="utf-8")
+        })
         try:
             subprocess.run([sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(job_path)], cwd=Path(__file__).resolve().parents[2], env=_isolated_subprocess_environment(), check=True, capture_output=True, text=True, timeout=900)
             result = _read_json(result_path)
         except (OSError, subprocess.SubprocessError, LiveRunError) as exc:
             raise LiveRunError(f"Hermes {arm} arm failed for {item.identifier}") from exc
+        finally:
+            job_path.unlink(missing_ok=True)
         if not isinstance(result, dict) or not isinstance(result.get("answer"), str) or not isinstance(result.get("usage"), dict):
             raise LiveRunError(f"Hermes {arm} arm produced an invalid result")
         return result
