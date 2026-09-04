@@ -2,15 +2,19 @@
 
 ## Status
 
-**Focused review pending.** The interrupted memory lane has no complete report:
-a successful retry lost its auxiliary billing-route label, and the prior
-evaluator stopped after 79 of 96 arms. The task owner directed that missing
-accounting metadata must not invalidate an otherwise valid run. Candidate
-`8c32e5e22252c54a39cd1df415d0cbe04bb67774` preserves retry route accounting,
-accepts only blank (not conflicting) auxiliary provider labels, and adds
-explicit resumption from complete saved worker results. It requires fresh
-focused review before the lane resumes. The prior review approved implementation
-commit `9a53ca9a21ba65f6b5c86089ccedf04a994f7315` and evidence pin
+**Focused review pending before a fresh coding lane.** The controlled memory
+lane resumed from its known 79-result checkpoint after a transient retry lost
+only an auxiliary billing-route label. The task owner directed that missing
+accounting metadata must not invalidate an otherwise valid run. It completed
+all 96 stock/Scroll arms on candidate
+`8c32e5e22252c54a39cd1df415d0cbe04bb67774`; its durable report is recorded
+below and is evidence, not an acceptance claim. The task owner then requested
+the reviewer's resume-provenance finding be fixed for future runs. Candidate
+`cbc0d324af9966aef1b612d64dd01eac7c56d5ee` binds new saved results to the
+frozen manifest/candidate, arm, task, model, history, and probe before reuse.
+Legacy bare checkpoints rerun under that future policy. Its refreshed coding
+manifest requires focused review before a fresh coding lane begins. The prior
+review approved implementation commit `9a53ca9a21ba65f6b5c86089ccedf04a994f7315` and evidence pin
 `27666ea2ea3c2298e11a98e9e42cb81cb7118bb6`. The pool lease fails closed
 unless its JWT has a finite numeric expiry strictly beyond 21 minutes; direct
 provenance, focused tests, Ruff, and diff checks passed. The earlier review
@@ -34,12 +38,14 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
+| Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
+| Coding implementation commit | `cbc0d324af9966aef1b612d64dd01eac7c56d5ee` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
-| Coding manifest SHA-256 | `63ce6355d62873e4877b11b4a913331a8928091a7dedaad8b6c569949c90df0a` |
+| Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
+| Coding manifest SHA-256 | `346f4a308a1e05b90025fc1014ab2d6bfda19a8f91ad69647e718c29bee19ef3` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -88,10 +94,20 @@ The durable reports intentionally contain no synthesized dollar total because a
 ChatGPT subscription is allowance-based and the previous cross-model dollar
 estimator was invalid.
 
+## Completed memory lane
+
+The resumed controlled run produced all 96 expected arms (48 stock and 48
+Scroll), with valid usage buckets for every agent and judge result. Aggregate
+score was 30.5804/48 for stock and 21.4991/48 for Scroll. This is below stock
+and does not meet the plan's memory-performance acceptance threshold. It is
+retained without normalization or exclusion. A 7-result partial coding attempt
+was stopped before this focused gate and is excluded; its ignored runtime files
+are not evidence.
+
 ## Verification and independent disposition
 
 - `pytest -q tests/evals/test_scroll_hermes_live.py tests/evals/test_scroll_coding_trajectories.py tests/evals/test_scroll_paired_runner.py tests/evals/test_scroll_live_manifest.py tests/plugins/test_scroll_documentation.py tests/agent/test_auxiliary_client.py::TestBuildCodexClient tests/agent/test_codex_cloudflare_headers.py`
-  — 48 passed.
+  — 237 passed after the resume-provenance correction.
 - `ruff check agent/auxiliary_client.py evals/scroll/hermes_live.py
   evals/scroll/coding_live.py tests/evals/test_scroll_hermes_live.py
   tests/agent/test_auxiliary_client.py tests/agent/test_codex_cloudflare_headers.py`
@@ -103,4 +119,5 @@ estimator was invalid.
 
 The prior independent review cleared implementation commit
 `5e03379f916ad563f359d8782b6577c773ac709d`, but it predates the Bubblewrap
-containment change and is not the approval for this candidate.
+containment and resume-provenance changes and is not the approval for the
+refreshed coding candidate.
