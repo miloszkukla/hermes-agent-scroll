@@ -80,7 +80,8 @@ python -m evals.scroll.hermes_live \
 
 python -m evals.scroll.coding_live \
   --manifest plugins/context_engine/scroll/evidence/live-coding-manifest.json \
-  --runtime-root .scroll-runtime/live-coding \
+  --runtime-root .scroll-runtime/live-coding-gated-20260904-r5 \
+  --resume-runtime-root .scroll-runtime/live-coding-gated-20260904-r4 \
   --output .scroll-runtime/reports/live-coding.json
 ```
 
