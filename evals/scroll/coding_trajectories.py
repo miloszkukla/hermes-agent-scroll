@@ -26,11 +26,11 @@ class CodingTrajectory:
         retried_call = f"call-{self.identifier.rsplit('/', 1)[-1]}-retry"
         entries = [
             {"role": "user", "content": f"Continue task {self.identifier}. Preserve APIs and use the focused test as the executable contract."},
-            {"role": "assistant", "content": "I will inspect the workspace and run the focused test.", "tool_calls": [{"id": failed_call, "name": "terminal", "arguments": '{"command":"cd /tmp/wrong-workspace && python -m pytest -q"}'}]},
+            {"role": "assistant", "content": "I will inspect the workspace and run the focused test.", "tool_calls": [{"id": failed_call, "type": "function", "function": {"name": "terminal", "arguments": '{"command":"cd /tmp/wrong-workspace && python -m pytest -q"}'}}]},
             {"role": "tool", "tool_name": "terminal", "tool_call_id": failed_call, "content": "bash: cd: /tmp/wrong-workspace: No such file or directory\nexit status 1"},
             {"role": "assistant", "content": "The terminal failure is a wrong-working-directory failure; I will retry in the task workspace."},
             {"role": "user", "content": "Retry from the task workspace and retain the failing-test evidence."},
-            {"role": "assistant", "content": "I will retry the focused test from the correct workspace.", "tool_calls": [{"id": retried_call, "name": "terminal", "arguments": '{"command":"python -m pytest -q"}'}]},
+            {"role": "assistant", "content": "I will retry the focused test from the correct workspace.", "tool_calls": [{"id": retried_call, "type": "function", "function": {"name": "terminal", "arguments": '{"command":"python -m pytest -q"}'}}]},
             {"role": "tool", "tool_name": "terminal", "tool_call_id": retried_call, "content": "2 failed, 1 passed in 0.12s\nAssertionError: expected normalized output"},
             {"role": "assistant", "content": "The retry reached the focused test and recorded the repair target."},
         ]

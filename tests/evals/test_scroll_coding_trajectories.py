@@ -16,6 +16,7 @@ def test_coding_trajectories_are_complete_and_cover_required_scenarios():
     assert all(canonical_history_tokens(item) >= CANONICAL_HISTORY_MIN_TOKENS for item in TRAJECTORIES)
     assert all(any(message["role"] == "tool" for message in item.history()) for item in TRAJECTORIES)
     assert all(sum(bool(message.get("tool_calls")) for message in item.history()) == 2 for item in TRAJECTORIES)
+    assert all(all(call["type"] == "function" and call["function"]["name"] == "terminal" and call["function"]["arguments"] for message in item.history() for call in message.get("tool_calls", [])) for item in TRAJECTORIES)
 
 
 def test_coding_workspace_starts_failing_and_reference_repair_is_not_present(tmp_path):
