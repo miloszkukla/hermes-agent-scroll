@@ -111,9 +111,10 @@ def verify_workspace(workspace: Path) -> bool:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(workspace)
     env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     try:
         completed = subprocess.run(
-            [sys.executable, "-m", "pytest", "-q"], cwd=workspace, env=env,
+            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"], cwd=workspace, env=env,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60,
         )
     except (OSError, subprocess.SubprocessError):

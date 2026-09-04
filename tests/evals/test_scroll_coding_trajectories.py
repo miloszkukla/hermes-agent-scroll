@@ -32,6 +32,16 @@ def test_coding_workspace_starts_failing_and_reference_repair_is_not_present(tmp
     assert "return value.upper()" not in (tmp_path / "app" / "normalizer.py").read_text(encoding="utf-8")
 
 
+def test_coding_workspace_verifier_does_not_mutate_the_workspace(tmp_path):
+    trajectory = next(item for item in TRAJECTORIES if item.category == "labels")
+    write_workspace(trajectory, tmp_path)
+    (tmp_path / "app" / "labels.py").write_text("def render(value):\n    return '|'.join(part.strip().lower() for part in value.split(','))\n", encoding="utf-8")
+    before = {path.relative_to(tmp_path): path.read_bytes() if path.is_file() else None for path in tmp_path.rglob("*")}
+
+    assert verify_workspace(tmp_path)
+    assert {path.relative_to(tmp_path): path.read_bytes() if path.is_file() else None for path in tmp_path.rglob("*")} == before
+
+
 def test_coding_manifest_requires_the_exact_fixed_ordered_set():
     manifest = {"datasets": [{"name": "coding-trajectories", "item_ids": [item.identifier for item in TRAJECTORIES]}]}
 
