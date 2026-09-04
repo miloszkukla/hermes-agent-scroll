@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -84,6 +85,21 @@ def _auxiliary_usage(db: Any, session_id: str) -> tuple[int, int]:
         return int(row[0] or 0), int(row[1] or 0)
     except Exception as exc:
         raise LiveRunError("could not account for auxiliary evaluation usage") from exc
+
+
+def _prepare_coding_scenario(agent: Any, history: list[dict[str, Any]], scenario: str, runtime_home: Path, rebuild: Any) -> tuple[Any, list[dict[str, Any]]]:
+    if scenario == "automatic-compaction":
+        return agent, history
+    if scenario == "manual-compaction":
+        compress = getattr(getattr(agent, "context_compressor", None), "compress", None)
+        if not callable(compress):
+            raise LiveRunError("coding manual-compaction arm has no context compressor")
+        return agent, compress(history, force=True)
+    if scenario == "cache-loss-resume":
+        agent.close()
+        shutil.rmtree(runtime_home / "cache" / "scroll", ignore_errors=True)
+        return rebuild(), history
+    raise LiveRunError(f"unknown coding scenario: {scenario}")
 
 
 def load_longmemeval_items(dataset_path: Path, identifiers: Sequence[str]) -> list[EvaluationItem]:
@@ -213,13 +229,24 @@ def _worker_result(job_path: Path) -> None:
     toolsets = ["context_engine"] if job["arm"] == "scroll" else []
     agent = None
     try:
-        agent = AIAgent(
-            provider="openrouter", model=job["model"], session_id=session_id, session_db=db,
-            enabled_toolsets=toolsets, quiet_mode=True, skip_context_files=True, skip_memory=True,
-            skip_background_review=True, platform="cli", max_iterations=int(job["max_iterations"]),
-            max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False},
-            request_overrides={"seed": job["seed"]},
-        )
+        def build_agent():
+            return AIAgent(
+                provider="openrouter", model=job["model"], session_id=session_id, session_db=db,
+                enabled_toolsets=toolsets, quiet_mode=True, skip_context_files=True, skip_memory=True,
+                skip_background_review=True, platform="cli", max_iterations=int(job["max_iterations"]),
+                max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False},
+                request_overrides={"seed": job["seed"]},
+            )
+
+        agent = build_agent()
+        if coding:
+            from agent.aux_accounting import reset_accounting_context, set_accounting_context
+
+            accounting_token = set_accounting_context(db, session_id)
+            try:
+                agent, history = _prepare_coding_scenario(agent, history, str(job.get("scenario") or ""), runtime_home, build_agent)
+            finally:
+                reset_accounting_context(accounting_token)
         response = agent.run_conversation(
             job["probe"]["question"], system_message=CODING_SYSTEM_PROMPT if coding else AGENT_SYSTEM_PROMPT,
             conversation_history=history,

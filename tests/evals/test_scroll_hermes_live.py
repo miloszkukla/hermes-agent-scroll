@@ -5,7 +5,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import LiveRunError, _auxiliary_usage, _prepare_coding_scenario, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 
 
 def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
@@ -75,3 +75,29 @@ def test_live_worker_counts_auxiliary_compression_usage():
     assert _auxiliary_usage(Database(), "session") == (12, 3)
     with pytest.raises(LiveRunError, match="auxiliary"):
         _auxiliary_usage(object(), "session")
+
+
+def test_coding_scenarios_drive_manual_selection_and_cold_rebuild(tmp_path):
+    class Compressor:
+        def compress(self, history, *, force):
+            assert force
+            return [*history, {"role": "system", "content": "selected"}]
+
+    class Agent:
+        context_compressor = Compressor()
+
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    original = Agent()
+    history = [{"role": "user", "content": "task"}]
+    selected_agent, selected_history = _prepare_coding_scenario(original, history, "manual-compaction", tmp_path, Agent)
+    assert selected_agent is original
+    assert selected_history[-1]["content"] == "selected"
+    (tmp_path / "cache" / "scroll").mkdir(parents=True)
+    rebuilt_agent, rebuilt_history = _prepare_coding_scenario(original, history, "cache-loss-resume", tmp_path, Agent)
+    assert original.closed and rebuilt_agent is not original and rebuilt_history is history
+    assert not (tmp_path / "cache" / "scroll").exists()
