@@ -14,6 +14,8 @@ It makes no benchmark-performance or paper-equivalence claim.
 | Coding implementation commit | `5d8cd7a0ff7c3a39b824a7eea646dc57ba00f2a5` |
 | Coding manifest digest | `db35ade09f204c0ca4e014ad58ae1bc5216e476da312836db71cff9493487fd4` |
 | Coding report SHA-256 | `9e31ce9087d133d2a021fb1ce02d569bd04d0e9c9a0b6fe8db735d69090c7ece` |
+| Warm-selection runner SHA-256 | `e071569fa1f3ddd23ff5cceab997e710a8f916dad9924263816a3349af69261a` |
+| Warm-selection report SHA-256 | `73034e4f6af55d65a7b1cbcc09643c9725d7765b5160d99bace4908f9b0e5929` |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
 | Memory manifest digest | `343b3169f912a5426ddceaadd6db7d1a814af2d2e84735a39133addc3c8387d9` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
@@ -45,14 +47,28 @@ pure Scroll selection. It is a useful end-to-end host-compaction cost, but it
 is broader than the plan's named warm-selection operation. The report must not
 be relabelled or normalized after the fact.
 
-For an operation-scoped check, the locked `ScrollContextEngine.compress()` path
-was warmed, then run across the six manual-compaction histories five times each
-(30 samples, every history at least 108,241 rough tokens) with four concurrent
-workers. The p50 was `0.000229403 s`, p95 was `0.000389821 s`, and maximum was
-`0.000504272 s`; each selected ten messages. This is the pure deterministic
-selection invoked by manual compaction and it passes the plan's 500 ms
-warm-selection limit. The final reviewer must explicitly decide whether the
-plan means this operation-scoped metric or the broader host-compaction timer;
+For the operation-scoped check, the credential-free
+`run_selection_benchmark.py` runner warms the locked
+`ScrollContextEngine.compress()` path, then times a second identical call across
+the six manual-compaction histories five times each (30 samples; every history
+has at least 108,241 rough tokens) using the manifest's four workers. It pins
+the manifest and implementation digests, runner hash, evidence-checkout commit,
+host/runtime identity, percentile method, and each task/repeat's token count,
+selected-message count, and timing in
+`selection-benchmark-2026-09-04.json`. It runs without model access:
+
+```bash
+source .venv/bin/activate
+python plugins/context_engine/scroll/evidence/run_selection_benchmark.py \
+  --manifest plugins/context_engine/scroll/evidence/live-coding-manifest.json \
+  --output plugins/context_engine/scroll/evidence/selection-benchmark-2026-09-04.json
+```
+
+The committed report's p50 is `0.000246278 s`, p95 is `0.000328411 s`, and
+maximum is `0.000493468 s`; each sample selected ten messages. This is the pure
+deterministic selection invoked by manual compaction and it passes the plan's
+500 ms warm-selection limit. The final reviewer must explicitly decide whether
+the plan means this operation-scoped metric or the broader host-compaction timer;
 the two values are intentionally both retained.
 
 ## Completed memory lane

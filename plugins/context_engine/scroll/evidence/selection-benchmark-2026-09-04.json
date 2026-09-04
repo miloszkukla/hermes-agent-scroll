@@ -1,0 +1,234 @@
+{
+  "context_window_tokens": 80000,
+  "evidence_checkout_commit": "1dbefc5fe2d1fa3a390eb8f8a334870298d3a48d",
+  "implementation_commit": "5d8cd7a0ff7c3a39b824a7eea646dc57ba00f2a5",
+  "manifest_sha256": "db35ade09f204c0ca4e014ad58ae1bc5216e476da312836db71cff9493487fd4",
+  "max_parallel_workers": 4,
+  "max_seconds": 0.0004934679600410163,
+  "meets_selection_gate": true,
+  "operation": "ScrollContextEngine.compress after one identical warm-up call",
+  "p50_seconds": 0.0002462780103087425,
+  "p95_seconds": 0.0003284109989181161,
+  "percentile_method": "sorted values at round((n - 1) * quantile)",
+  "repeats_per_trajectory": 5,
+  "runner_sha256": "e071569fa1f3ddd23ff5cceab997e710a8f916dad9924263816a3349af69261a",
+  "runtime": {
+    "cpu_count": 6,
+    "platform": "Linux-7.0.0-30-generic-x86_64-with-glibc2.43",
+    "python_implementation": "CPython",
+    "python_version": "3.12.14"
+  },
+  "samples": [
+    {
+      "history_tokens": 114124,
+      "repeat": 1,
+      "seconds": 0.00025783502496778965,
+      "selected_messages": 10,
+      "task_id": "coding/09-routes"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 2,
+      "seconds": 0.0002591879456304014,
+      "selected_messages": 10,
+      "task_id": "coding/09-routes"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 3,
+      "seconds": 0.00024172099074348807,
+      "selected_messages": 10,
+      "task_id": "coding/09-routes"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 4,
+      "seconds": 0.00020315294386819005,
+      "selected_messages": 10,
+      "task_id": "coding/09-routes"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 5,
+      "seconds": 0.0003210210124962032,
+      "selected_messages": 10,
+      "task_id": "coding/09-routes"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 1,
+      "seconds": 0.0003035939880646765,
+      "selected_messages": 10,
+      "task_id": "coding/10-render"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 2,
+      "seconds": 0.0002019619569182396,
+      "selected_messages": 10,
+      "task_id": "coding/10-render"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 3,
+      "seconds": 0.0002858079969882965,
+      "selected_messages": 10,
+      "task_id": "coding/10-render"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 4,
+      "seconds": 0.0002507750177755952,
+      "selected_messages": 10,
+      "task_id": "coding/10-render"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 5,
+      "seconds": 0.00019838596927002072,
+      "selected_messages": 10,
+      "task_id": "coding/10-render"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 1,
+      "seconds": 0.00018671900033950806,
+      "selected_messages": 10,
+      "task_id": "coding/11-labels"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 2,
+      "seconds": 0.0003284109989181161,
+      "selected_messages": 10,
+      "task_id": "coding/11-labels"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 3,
+      "seconds": 0.0002646869979798794,
+      "selected_messages": 10,
+      "task_id": "coding/11-labels"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 4,
+      "seconds": 0.00022062996868044138,
+      "selected_messages": 10,
+      "task_id": "coding/11-labels"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 5,
+      "seconds": 0.00028413499239832163,
+      "selected_messages": 10,
+      "task_id": "coding/11-labels"
+    },
+    {
+      "history_tokens": 108241,
+      "repeat": 1,
+      "seconds": 0.0002300440100952983,
+      "selected_messages": 10,
+      "task_id": "coding/12-flags"
+    },
+    {
+      "history_tokens": 108241,
+      "repeat": 2,
+      "seconds": 0.00018867198377847672,
+      "selected_messages": 10,
+      "task_id": "coding/12-flags"
+    },
+    {
+      "history_tokens": 108241,
+      "repeat": 3,
+      "seconds": 0.00026081997202709317,
+      "selected_messages": 10,
+      "task_id": "coding/12-flags"
+    },
+    {
+      "history_tokens": 108241,
+      "repeat": 4,
+      "seconds": 0.00017409102292731404,
+      "selected_messages": 10,
+      "task_id": "coding/12-flags"
+    },
+    {
+      "history_tokens": 108241,
+      "repeat": 5,
+      "seconds": 0.00024416501400992274,
+      "selected_messages": 10,
+      "task_id": "coding/12-flags"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 1,
+      "seconds": 0.0002499840338714421,
+      "selected_messages": 10,
+      "task_id": "coding/13-limits"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 2,
+      "seconds": 0.00019312003860250115,
+      "selected_messages": 10,
+      "task_id": "coding/13-limits"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 3,
+      "seconds": 0.00014260399620980024,
+      "selected_messages": 10,
+      "task_id": "coding/13-limits"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 4,
+      "seconds": 0.0001655680243857205,
+      "selected_messages": 10,
+      "task_id": "coding/13-limits"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 5,
+      "seconds": 0.0002462780103087425,
+      "selected_messages": 10,
+      "task_id": "coding/13-limits"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 1,
+      "seconds": 0.0004934679600410163,
+      "selected_messages": 10,
+      "task_id": "coding/14-routes"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 2,
+      "seconds": 0.00030347402207553387,
+      "selected_messages": 10,
+      "task_id": "coding/14-routes"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 3,
+      "seconds": 0.0002659279853105545,
+      "selected_messages": 10,
+      "task_id": "coding/14-routes"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 4,
+      "seconds": 0.00019333901582285762,
+      "selected_messages": 10,
+      "task_id": "coding/14-routes"
+    },
+    {
+      "history_tokens": 114124,
+      "repeat": 5,
+      "seconds": 0.0002824129769578576,
+      "selected_messages": 10,
+      "task_id": "coding/14-routes"
+    }
+  ],
+  "schema_version": 1
+}
