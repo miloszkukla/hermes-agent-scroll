@@ -169,6 +169,24 @@ class TestSchemaMigrationV22:
 
 
 class TestAmbientAccountingContext:
+    def test_strict_failure_sink_survives_nested_context_and_records_errors(self):
+        from agent.aux_accounting import record_aux_usage, reset_accounting_context, set_accounting_context
+
+        class FailingDatabase:
+            def record_auxiliary_usage(self, *_args, **_kwargs):
+                raise RuntimeError("write failed")
+
+        database = FailingDatabase()
+        failures = []
+        outer = set_accounting_context(database, "s1", failure_sink=failures)
+        inner = set_accounting_context(database, "s1")
+        try:
+            record_aux_usage(_mk_response(), "compression", provider="openrouter")
+        finally:
+            reset_accounting_context(inner)
+            reset_accounting_context(outer)
+        assert failures == ["auxiliary usage recording failed"]
+
     def test_record_aux_usage_writes_through_context(self, db):
         from agent.aux_accounting import (
             record_aux_usage,
@@ -295,4 +313,3 @@ class TestInsightsAuxTotals:
         assert ov["total_output_tokens"] == 600
         models = {m["model"] for m in report["models"]}
         assert {"main-model", "glm-5"} <= models
-

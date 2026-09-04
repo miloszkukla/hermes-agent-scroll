@@ -62,7 +62,10 @@ def _usage(value: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, f
     cost = raw.get("cost_usd")
     if not isinstance(cost, (int, float)) or isinstance(cost, bool) or cost < 0:
         raise LiveRunError("coding executor usage.cost_usd is invalid")
-    result["cost_usd"] = cost
+    expected_cost = result["input_tokens"] * manifest["input_price_per_token"] + result["output_tokens"] * manifest["output_price_per_token"] + result["cache_read_tokens"] * manifest["cache_read_price_per_token"]
+    if not math.isclose(float(cost), expected_cost, rel_tol=0.0, abs_tol=1e-12):
+        raise LiveRunError("coding executor usage.cost_usd does not match frozen prices")
+    result["cost_usd"] = expected_cost
     return result
 
 

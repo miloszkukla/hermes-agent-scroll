@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -42,7 +43,7 @@ def _usage(value: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, f
         raise PairedRunError("executor usage must be a mapping")
     usage: dict[str, float | int] = {}
     for key in _USAGE_KEYS:
-        number = raw.get(key, 0)
+        number = raw.get(key)
         if not isinstance(number, (int, float)) or isinstance(number, bool) or number < 0:
             raise PairedRunError(f"executor usage.{key} must be non-negative")
         usage[key] = number
@@ -52,6 +53,10 @@ def _usage(value: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, f
         raise PairedRunError("executor exceeded frozen output_token_budget")
     if usage["cache_read_tokens"] > manifest["cache_read_token_budget"]:
         raise PairedRunError("executor exceeded frozen cache_read_token_budget")
+    expected_cost = usage["input_tokens"] * manifest["input_price_per_token"] + usage["output_tokens"] * manifest["output_price_per_token"] + usage["cache_read_tokens"] * manifest["cache_read_price_per_token"]
+    if not math.isclose(float(usage["cost_usd"]), expected_cost, rel_tol=0.0, abs_tol=1e-12):
+        raise PairedRunError("executor usage.cost_usd does not match frozen prices")
+    usage["cost_usd"] = expected_cost
     return usage
 
 

@@ -43,7 +43,7 @@ _accounting: ContextVar[Optional[tuple]] = ContextVar(
 _EXCLUDED_TASKS = frozenset({"moa_reference", "moa_aggregator"})
 
 
-def set_accounting_context(session_db: Any, session_id: Optional[str]):
+def set_accounting_context(session_db: Any, session_id: Optional[str], *, failure_sink: Optional[list[str]] = None):
     """Publish the active session's accounting handles for aux usage recording.
 
     Called by the agent loop at turn entry. Returns the ContextVar token so
@@ -52,7 +52,10 @@ def set_accounting_context(session_db: Any, session_id: Optional[str]):
     """
     if session_db is None or not session_id:
         return _accounting.set(None)
-    return _accounting.set((session_db, session_id))
+    current = _accounting.get()
+    if failure_sink is None and current is not None and current[0] is session_db and current[1] == session_id:
+        failure_sink = current[2] if len(current) > 2 else None
+    return _accounting.set((session_db, session_id, failure_sink))
 
 
 def reset_accounting_context(token) -> None:
@@ -65,7 +68,13 @@ def reset_accounting_context(token) -> None:
 
 def get_accounting_context() -> Optional[tuple]:
     """Return ``(session_db, session_id)`` for the active turn, or ``None``."""
-    return _accounting.get()
+    context = _accounting.get()
+    return context[:2] if context is not None else None
+
+
+def _record_failure(context: Optional[tuple], message: str) -> None:
+    if context is not None and len(context) > 2 and context[2] is not None:
+        context[2].append(message)
 
 
 def record_aux_usage(
@@ -89,15 +98,17 @@ def record_aux_usage(
     client's provider-fallback chains); *provider*/*base_url* reflect the
     originally-resolved route and are best-effort.
     """
+    context = None
     try:
         if not task or task in _EXCLUDED_TASKS:
             return
-        ctx = _accounting.get()
-        if ctx is None:
+        context = _accounting.get()
+        if context is None:
             return
-        session_db, session_id = ctx
+        session_db, session_id = context[:2]
         raw_usage = getattr(response, "usage", None)
         if raw_usage is None:
+            _record_failure(context, "auxiliary response omitted usage")
             return
 
         from agent.usage_pricing import estimate_usage_cost, normalize_usage
@@ -108,6 +119,7 @@ def record_aux_usage(
             or usage.cache_read_tokens or usage.cache_write_tokens
             or usage.reasoning_tokens
         ):
+            _record_failure(context, "auxiliary response reported zero usage")
             return
 
         model = str(getattr(response, "model", "") or "") or "unknown"
@@ -135,4 +147,5 @@ def record_aux_usage(
             estimated_cost_usd=estimated_cost,
         )
     except Exception:
+        _record_failure(context, "auxiliary usage recording failed")
         logger.debug("Aux usage recording failed (non-fatal)", exc_info=True)

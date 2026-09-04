@@ -355,6 +355,10 @@ def _worker_result(job_path: Path) -> None:
 
         _configure_coding_workspace(workspace, session_id, register_task_env_overrides)
         clear_workspace = clear_task_env_overrides
+    from agent.aux_accounting import reset_accounting_context, set_accounting_context
+
+    accounting_failures = []
+    accounting_token = set_accounting_context(db, session_id, failure_sink=accounting_failures)
     agent = None
     try:
         def build_agent():
@@ -363,14 +367,8 @@ def _worker_result(job_path: Path) -> None:
         agent = build_agent()
         scenario_latency_seconds = 0.0
         if coding:
-            from agent.aux_accounting import reset_accounting_context, set_accounting_context
-
             scenario_started = time.monotonic()
-            accounting_token = set_accounting_context(db, session_id)
-            try:
-                agent, history = _prepare_coding_scenario(agent, history, CODING_SYSTEM_PROMPT, str(job.get("scenario") or ""), runtime_home, build_agent)
-            finally:
-                reset_accounting_context(accounting_token)
+            agent, history = _prepare_coding_scenario(agent, history, CODING_SYSTEM_PROMPT, str(job.get("scenario") or ""), runtime_home, build_agent)
             scenario_latency_seconds = time.monotonic() - scenario_started
         response = agent.run_conversation(
             job["probe"]["question"], system_message=CODING_SYSTEM_PROMPT if coding else AGENT_SYSTEM_PROMPT,
@@ -379,6 +377,10 @@ def _worker_result(job_path: Path) -> None:
         answer = response.get("final_response") if isinstance(response, dict) else None
         if not isinstance(answer, str) or not answer.strip() or (isinstance(response, dict) and response.get("failed")):
             raise LiveRunError("Hermes evaluation arm failed before a final answer")
+        if int(getattr(agent, "session_api_calls", 0) or 0) <= 0 or int(getattr(agent, "session_output_tokens", 0) or 0) <= 0:
+            raise LiveRunError("Hermes evaluation arm omitted main-model usage")
+        if accounting_failures:
+            raise LiveRunError("auxiliary evaluation accounting failed")
         input_tokens = int(getattr(agent, "session_input_tokens", 0) or 0)
         output_tokens = int(getattr(agent, "session_output_tokens", 0) or 0)
         cache_read_tokens = int(getattr(agent, "session_cache_read_tokens", 0) or 0)
@@ -392,6 +394,7 @@ def _worker_result(job_path: Path) -> None:
             "scenario_latency_seconds": scenario_latency_seconds,
         }), encoding="utf-8")
     finally:
+        reset_accounting_context(accounting_token)
         if agent is not None:
             agent.close()
         if clear_workspace is not None:
@@ -417,11 +420,16 @@ class Judge:
     def invoke(self, prompt):
         messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else list(prompt)
         reply = self.client.chat.completions.create(model=payload["model"], messages=messages, seed=payload["seed"], service_tier=payload["service_tier"], max_tokens=payload["max_output_tokens"])
+        if getattr(reply, "usage", None) is None:
+            raise RuntimeError("judge response omitted usage")
         with lock:
             prompt_tokens = int(usage_value(reply.usage, "prompt_tokens") or 0)
             cache_read_tokens = int(usage_value(usage_value(reply.usage, "prompt_tokens_details"), "cached_tokens") or 0)
+            completion_tokens = int(usage_value(reply.usage, "completion_tokens") or 0)
+            if prompt_tokens <= 0 or completion_tokens <= 0:
+                raise RuntimeError("judge response reported incomplete usage")
             usage["input_tokens"] += max(0, prompt_tokens - cache_read_tokens)
-            usage["output_tokens"] += int(usage_value(reply.usage, "completion_tokens") or 0)
+            usage["output_tokens"] += completion_tokens
             usage["cache_read_tokens"] += cache_read_tokens
         return SimpleNamespace(content=reply.choices[0].message.content or "")
 
