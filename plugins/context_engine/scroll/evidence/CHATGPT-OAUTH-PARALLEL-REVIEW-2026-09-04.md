@@ -18,12 +18,12 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `ab1738ffd398e40ea0eb555a732ba37ea8891fab` |
+| Implementation commit | `b6dd0b0a1e200ac6257f28799480944a5061c2b8` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
-| Memory manifest SHA-256 | `753d3ba4c3a747afc55bdd6fe6a2b73ffa6a8749066e7cd339ff56c60ac7d07a` |
-| Coding manifest SHA-256 | `d57139f4579a8f7524f63db22553f10245c47fff410ecee6f335855022a9525f` |
+| Memory manifest SHA-256 | `af4fc55281d7abc60e15fa1b471b301a14496d7c2ee0f54a779c348212db6607` |
+| Coding manifest SHA-256 | `5e11cabb3d7529662f2532af105d4d4e64ac46ce7678be682b9a2cf0a9120a67` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
