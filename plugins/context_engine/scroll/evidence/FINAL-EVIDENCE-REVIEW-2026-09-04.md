@@ -2,12 +2,13 @@
 
 ## Status
 
-**PENDING independent final evidence review after the current memory-lane
-rerun.** The former approval verified the coding lane and warm-selection
-artifact, but the completed memory lane was bound to `8c32e5e…`, before later
-`agent/auxiliary_client.py` changes. The new
+**APPROVED by independent final evidence review.** The former approval verified
+the coding lane and warm-selection artifact, but the completed memory lane was
+bound to `8c32e5e…`, before later `agent/auxiliary_client.py` changes. The new
 `live-memory-rerun-20260905-manifest.json` binds the same frozen data and prompt
-to `5d8cd7a…`; the completed result below now requires final review.
+to `5d8cd7a…`; the reviewer verified its provenance, all 96 paired rows, usage,
+redaction, and exclusion of every old-run result. Its credential-free focused
+validation had 37 passing tests.
 
 ## Frozen inputs and reports
 
