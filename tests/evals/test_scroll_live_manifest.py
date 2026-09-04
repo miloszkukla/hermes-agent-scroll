@@ -41,7 +41,8 @@ def _manifest():
 
 
 def _coding_manifest():
-    return {**_manifest(), "schema_version": 3, "context_total_ceiling_seconds": 1500, "auxiliary_compression_timeout_seconds": 400, "worker_timeout_seconds": 1650, "worker_access_token_minimum_ttl_seconds": 1800, "resume_attestation_sha256": "a" * 64, "resume_source": {"manifest_sha256": "e" * 64, "implementation_commit": "f" * 40, "runtime_root_name": "live-coding-gated-20260904-r4", "context_total_ceiling_seconds": 900, "auxiliary_compression_timeout_seconds": 300, "worker_timeout_seconds": 1200, "worker_access_token_minimum_ttl_seconds": 1260}}
+    source = {"manifest_sha256": "e" * 64, "implementation_commit": "f" * 40, "runtime_root_name": "live-coding-gated-20260904-r4", "context_total_ceiling_seconds": 900, "auxiliary_compression_timeout_seconds": 300, "worker_timeout_seconds": 1200, "worker_access_token_minimum_ttl_seconds": 1260, "attestation_file": "r4.json", "attestation_sha256": "a" * 64}
+    return {**_manifest(), "schema_version": 4, "context_total_ceiling_seconds": 3000, "auxiliary_compression_timeout_seconds": 800, "worker_timeout_seconds": 3300, "worker_access_token_minimum_ttl_seconds": 3500, "resume_sources": {source["runtime_root_name"]: source}}
 
 
 def test_live_manifest_requires_a_frozen_symmetric_credential_free_shape():
@@ -80,9 +81,9 @@ def test_live_manifest_requires_a_frozen_symmetric_credential_free_shape():
     with pytest.raises(LiveManifestError, match="budgets"):
         validate_live_manifest({**_manifest(), "schema_version": 2, "context_total_ceiling_seconds": 0})
     with pytest.raises(LiveManifestError, match="budgets"):
-        validate_live_manifest({**_coding_manifest(), "worker_timeout_seconds": 1500})
+        validate_live_manifest({**_coding_manifest(), "worker_timeout_seconds": 3000})
     with pytest.raises(LiveManifestError, match="strictly lower"):
-        validate_live_manifest({**_coding_manifest(), "resume_source": {**_coding_manifest()["resume_source"], "worker_timeout_seconds": 1650}})
+        validate_live_manifest({**_coding_manifest(), "resume_sources": {"live-coding-gated-20260904-r4": {**_coding_manifest()["resume_sources"]["live-coding-gated-20260904-r4"], "worker_timeout_seconds": 3300}}})
 
 
 def test_live_manifest_template_is_not_live_evaluation_authorization():
@@ -97,7 +98,7 @@ def test_live_evaluators_bind_their_manifest_schema_before_provenance_or_auth(tm
     coding_path = tmp_path / "coding.json"
     coding_path.write_text(json.dumps(coding), encoding="utf-8")
 
-    with pytest.raises(LiveRunError, match="coding evaluation requires schema_version 3"):
+    with pytest.raises(LiveRunError, match="coding evaluation requires schema_version 4"):
         run_coding_evaluation(coding_path, runtime_root=tmp_path / "coding-runtime", output_path=tmp_path / "coding-report.json")
 
     memory = {**_manifest(), "schema_version": 2, "context_total_ceiling_seconds": 900}

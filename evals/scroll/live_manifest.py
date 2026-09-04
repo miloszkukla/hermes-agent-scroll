@@ -12,8 +12,10 @@ _CREDENTIAL_VALUE_RE = re.compile(r"(?:^|\s)(?:basic\s+|bearer\s+|sk-|AIza|gh[po
 _MANIFEST_KEYS = frozenset({"schema_version", "live_model", "implementation_commit", "plan_sha256", "credential_free_manifest_sha256", "agent_prompt_sha256", "provider", "authentication_mode", "billing_mode", "agent_model", "judge_model", "judge_source", "temperature", "seed", "context_window_tokens", "max_iterations", "max_output_tokens", "max_parallel_workers", "input_token_budget", "output_token_budget", "cache_read_token_budget", "source_revisions", "licenses", "datasets", "arms"})
 _V2_MANIFEST_KEYS = _MANIFEST_KEYS | {"context_total_ceiling_seconds"}
 _V3_MANIFEST_KEYS = _V2_MANIFEST_KEYS | {"auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds", "resume_attestation_sha256", "resume_source"}
+_V4_MANIFEST_KEYS = _V2_MANIFEST_KEYS | {"auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds", "resume_sources"}
 _DATASET_KEYS = frozenset({"name", "revision", "item_ids"})
 _RESUME_SOURCE_KEYS = frozenset({"manifest_sha256", "implementation_commit", "runtime_root_name", "context_total_ceiling_seconds", "auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds"})
+_V4_RESUME_SOURCE_KEYS = _RESUME_SOURCE_KEYS | {"attestation_file", "attestation_sha256"}
 
 
 class LiveManifestError(ValueError):
@@ -43,11 +45,11 @@ def validate_live_manifest(manifest: dict[str, Any]) -> None:
     if _contains_credential(manifest):
         raise LiveManifestError("manifest must not contain credentials")
     schema_version = manifest.get("schema_version")
-    expected_keys = _MANIFEST_KEYS if schema_version == 1 else _V2_MANIFEST_KEYS if schema_version == 2 else _V3_MANIFEST_KEYS if schema_version == 3 else None
+    expected_keys = _MANIFEST_KEYS if schema_version == 1 else _V2_MANIFEST_KEYS if schema_version == 2 else _V3_MANIFEST_KEYS if schema_version == 3 else _V4_MANIFEST_KEYS if schema_version == 4 else None
     if expected_keys is None or set(manifest) != expected_keys:
         raise LiveManifestError("manifest must contain only the frozen schema fields")
     if isinstance(schema_version, bool):
-        raise LiveManifestError("schema_version must be 1, 2, or 3")
+        raise LiveManifestError("schema_version must be 1, 2, 3, or 4")
     if manifest.get("live_model") is not True:
         raise LiveManifestError("live_model must be explicitly true")
     if not _COMMIT_RE.fullmatch(str(manifest.get("implementation_commit", ""))):
@@ -64,7 +66,7 @@ def validate_live_manifest(manifest: dict[str, Any]) -> None:
     numeric_keys = ("seed", "context_window_tokens", "max_iterations", "max_output_tokens", "max_parallel_workers", "input_token_budget", "output_token_budget", "cache_read_token_budget")
     if schema_version >= 2:
         numeric_keys += ("context_total_ceiling_seconds",)
-    if schema_version == 3:
+    if schema_version >= 3:
         numeric_keys += ("auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds")
     for key in numeric_keys:
         _require(manifest.get(key), key, (int, float))
@@ -73,8 +75,8 @@ def validate_live_manifest(manifest: dict[str, Any]) -> None:
     temperature = manifest.get("temperature")
     if temperature is not None and (not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or temperature < 0):
         raise LiveManifestError("temperature must be non-negative or null when the model does not support it")
-    adapter_ceiling = max(600, 4 * manifest["auxiliary_compression_timeout_seconds"]) if schema_version == 3 else 0
-    if manifest["context_window_tokens"] <= 0 or manifest["max_iterations"] <= 0 or manifest["max_output_tokens"] <= 0 or manifest["max_parallel_workers"] <= 0 or manifest["max_parallel_workers"] > 4 or manifest["input_token_budget"] <= 0 or manifest["output_token_budget"] <= 0 or manifest["cache_read_token_budget"] <= 0 or (schema_version >= 2 and manifest["context_total_ceiling_seconds"] <= 0) or (schema_version == 3 and (manifest["auxiliary_compression_timeout_seconds"] <= 0 or manifest["context_total_ceiling_seconds"] >= adapter_ceiling or manifest["worker_timeout_seconds"] <= adapter_ceiling or manifest["worker_access_token_minimum_ttl_seconds"] <= manifest["worker_timeout_seconds"])):
+    adapter_ceiling = max(600, 4 * manifest["auxiliary_compression_timeout_seconds"]) if schema_version >= 3 else 0
+    if manifest["context_window_tokens"] <= 0 or manifest["max_iterations"] <= 0 or manifest["max_output_tokens"] <= 0 or manifest["max_parallel_workers"] <= 0 or manifest["max_parallel_workers"] > 4 or manifest["input_token_budget"] <= 0 or manifest["output_token_budget"] <= 0 or manifest["cache_read_token_budget"] <= 0 or (schema_version >= 2 and manifest["context_total_ceiling_seconds"] <= 0) or (schema_version >= 3 and (manifest["auxiliary_compression_timeout_seconds"] <= 0 or manifest["context_total_ceiling_seconds"] >= adapter_ceiling or manifest["worker_timeout_seconds"] <= adapter_ceiling or manifest["worker_access_token_minimum_ttl_seconds"] <= manifest["worker_timeout_seconds"])):
         raise LiveManifestError("token budgets must be positive and max_parallel_workers must be between 1 and 4")
     if schema_version == 3:
         if not _SHA256_RE.fullmatch(str(manifest.get("resume_attestation_sha256", ""))):
@@ -88,6 +90,15 @@ def validate_live_manifest(manifest: dict[str, Any]) -> None:
             raise LiveManifestError("resume_source timeout values must be positive")
         if any(resume_source[key] >= manifest[key] for key in ("context_total_ceiling_seconds", "auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds")):
             raise LiveManifestError("resume_source must use strictly lower timeout bounds")
+    if schema_version == 4:
+        resume_sources = _require(manifest.get("resume_sources"), "resume_sources", dict)
+        for name, resume_source in resume_sources.items():
+            if not isinstance(name, str) or not name or not isinstance(resume_source, dict) or set(resume_source) != _V4_RESUME_SOURCE_KEYS or resume_source.get("runtime_root_name") != name or not _SHA256_RE.fullmatch(str(resume_source.get("manifest_sha256", ""))) or not _COMMIT_RE.fullmatch(str(resume_source.get("implementation_commit", ""))) or not isinstance(resume_source.get("attestation_file"), str) or "/" in resume_source["attestation_file"] or not resume_source["attestation_file"].endswith(".json") or not _SHA256_RE.fullmatch(str(resume_source.get("attestation_sha256", ""))):
+                raise LiveManifestError("resume_sources must pin compatible prior coding runtimes")
+            for key in ("context_total_ceiling_seconds", "auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds"):
+                _require(resume_source.get(key), f"resume_sources.{name}.{key}", (int, float))
+            if any(resume_source[key] <= 0 or resume_source[key] >= manifest[key] for key in ("context_total_ceiling_seconds", "auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds")):
+                raise LiveManifestError("resume_sources must use strictly lower timeout bounds")
     for key in ("source_revisions", "licenses"):
         value = _require(manifest.get(key), key, dict)
         if not all(isinstance(name, str) and name and isinstance(revision, str) and revision for name, revision in value.items()):

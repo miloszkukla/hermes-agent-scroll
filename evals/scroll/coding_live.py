@@ -24,7 +24,8 @@ from .live_manifest import validate_live_manifest
 _REPEATS = 5
 _BOOTSTRAP_RESAMPLES = 10_000
 _SANDBOX_JOB_ROOT = Path("/work")
-_RESUME_ATTESTATION_PATH = Path("plugins/context_engine/scroll/evidence/live-coding-r4-resume-attestation.json")
+_RESUME_ATTESTATION_DIRECTORY = Path("plugins/context_engine/scroll/evidence")
+_RESUME_SOURCE_KEYS = ("manifest_sha256", "implementation_commit", "runtime_root_name", "context_total_ceiling_seconds", "auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds")
 
 
 def _read_manifest(path: Path) -> dict[str, Any]:
@@ -142,27 +143,35 @@ def _workspace_sha256(workspace: Path) -> str:
 
 
 def _resume_attestation(manifest: Mapping[str, Any], repository_root: Path) -> Mapping[str, Any]:
-    path = repository_root / _RESUME_ATTESTATION_PATH
-    try:
-        if _sha256_file(path) != manifest["resume_attestation_sha256"]:
-            raise LiveRunError("coding resume attestation hash does not match the manifest")
-        attestation = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise LiveRunError("coding resume attestation is unavailable") from exc
-    source = manifest["resume_source"]
-    source_keys = ("manifest_sha256", "implementation_commit", "runtime_root_name", "context_total_ceiling_seconds", "auxiliary_compression_timeout_seconds", "worker_timeout_seconds", "worker_access_token_minimum_ttl_seconds")
-    expected_keys = frozenset(("schema_version", "jobs", *source_keys))
-    if not isinstance(attestation, Mapping) or set(attestation) != expected_keys or attestation.get("schema_version") != 1 or any(attestation.get(key) != source[key] for key in source_keys) or not isinstance(attestation.get("jobs"), Mapping):
-        raise LiveRunError("coding resume attestation does not match the frozen source")
-    return attestation
+    sources = manifest["resume_sources"]
+    jobs = {}
+    for name, source in sources.items():
+        path = repository_root / _RESUME_ATTESTATION_DIRECTORY / source["attestation_file"]
+        try:
+            if _sha256_file(path) != source["attestation_sha256"]:
+                raise LiveRunError("coding resume attestation hash does not match the manifest")
+            attestation = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise LiveRunError("coding resume attestation is unavailable") from exc
+        expected_keys = frozenset(("schema_version", "jobs", *_RESUME_SOURCE_KEYS))
+        if not isinstance(attestation, Mapping) or set(attestation) != expected_keys or attestation.get("schema_version") != 1 or any(attestation.get(key) != source[key] for key in _RESUME_SOURCE_KEYS) or not isinstance(attestation.get("jobs"), Mapping):
+            raise LiveRunError("coding resume attestation does not match the frozen source")
+        for job_name, entry in attestation["jobs"].items():
+            if job_name in jobs:
+                raise LiveRunError("coding resume attestations contain duplicate jobs")
+            jobs[job_name] = {"runtime_root_name": name, **entry}
+    return {"jobs": jobs}
 
 
-def _resumable_coding_result(result_path: Path, workspace: Path, manifest: Mapping[str, Any], attestation: Mapping[str, Any], job_name: str) -> Mapping[str, Any] | None:
+def _resumable_coding_result(resume_runtime_roots: Mapping[str, Path], manifest: Mapping[str, Any], attestation: Mapping[str, Any], job_name: str) -> Mapping[str, Any] | None:
     entry = attestation["jobs"].get(job_name)
     if entry is None:
         return None
-    if not isinstance(entry, Mapping) or set(entry) != {"result_sha256", "workspace_sha256"} or not all(isinstance(entry[key], str) and len(entry[key]) == 64 and all(character in "0123456789abcdef" for character in entry[key]) for key in entry):
+    if not isinstance(entry, Mapping) or set(entry) != {"runtime_root_name", "result_sha256", "workspace_sha256"} or not isinstance(entry.get("runtime_root_name"), str) or entry["runtime_root_name"] not in resume_runtime_roots or not all(isinstance(entry[key], str) and len(entry[key]) == 64 and all(character in "0123456789abcdef" for character in entry[key]) for key in ("result_sha256", "workspace_sha256")):
         raise LiveRunError("coding resume attestation has an invalid job entry")
+    root = resume_runtime_roots[entry["runtime_root_name"]]
+    result_path = root / "jobs" / job_name / "result.json"
+    workspace = root / "jobs" / job_name / "workspace"
     try:
         if _sha256_file(result_path) != entry["result_sha256"] or _workspace_sha256(workspace) != entry["workspace_sha256"]:
             raise LiveRunError("coding resume artifact does not match its attestation")
@@ -180,12 +189,12 @@ def _resumable_coding_result(result_path: Path, workspace: Path, manifest: Mappi
 
 def run_coding_evaluation(
     manifest_path: Path, *, runtime_root: Path, output_path: Path,
-    credential_home: Path = Path.home() / ".hermes", resume_runtime_root: Path | None = None,
+    credential_home: Path = Path.home() / ".hermes", resume_runtime_roots: tuple[Path, ...] = (),
 ) -> dict[str, Any]:
     manifest = _read_manifest(manifest_path)
     validate_live_manifest(manifest)
-    if manifest["schema_version"] != 3:
-        raise LiveRunError("coding evaluation requires schema_version 3")
+    if manifest["schema_version"] != 4:
+        raise LiveRunError("coding evaluation requires schema_version 4")
     repository_root = Path(__file__).resolve().parents[2]
     verify_manifest_provenance(manifest, repository_root)
     if manifest["agent_prompt_sha256"] != coding_prompt_sha256():
@@ -198,17 +207,15 @@ def run_coding_evaluation(
     runtime_root = runtime_root.resolve()
     _secure_directory(runtime_root)
     _secure_directory(runtime_root / "jobs")
-    if resume_runtime_root is None:
-        raise LiveRunError("coding evaluation requires its frozen resume runtime")
-    resume_runtime_root = resume_runtime_root.resolve()
-    if resume_runtime_root == runtime_root or not resume_runtime_root.is_dir() or resume_runtime_root.name != manifest["resume_source"]["runtime_root_name"]:
-        raise LiveRunError("coding resume runtime does not match the frozen source")
+    resume_roots = {path.resolve().name: path.resolve() for path in resume_runtime_roots}
+    if len(resume_roots) != len(resume_runtime_roots) or set(resume_roots) != set(manifest["resume_sources"]) or any(path == runtime_root or not path.is_dir() for path in resume_roots.values()):
+        raise LiveRunError("coding resume runtimes do not match the frozen sources")
     attestation = _resume_attestation(manifest, repository_root)
 
     def execute(arm: str, item, repeat: int) -> Mapping[str, Any]:
         probe = {"id": item.identifier, "type": item.category, "question": item.prompt}
         job_name = hashlib.sha256(f"{arm}:{item.identifier}:{repeat}".encode()).hexdigest()
-        prior = _resumable_coding_result(resume_runtime_root / "jobs" / job_name / "result.json", resume_runtime_root / "jobs" / job_name / "workspace", manifest, attestation, job_name)
+        prior = _resumable_coding_result(resume_roots, manifest, attestation, job_name)
         if prior is not None:
             return prior
         job_root = runtime_root / "jobs" / job_name
@@ -274,7 +281,7 @@ def run_coding_evaluation(
     lower_bound = paired_bootstrap_lower_bound(task_deltas, seed=int(manifest["seed"]))
     manifest_digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     report = {
-        "manifest_sha256": manifest_digest, "billing_mode": manifest["billing_mode"], "rows": rows, "resumed_rows": sum(row["resumed"] for row in rows), "resume_source": manifest["resume_source"], "resume_attestation_sha256": manifest["resume_attestation_sha256"], "repeats_per_trajectory": _REPEATS,
+        "manifest_sha256": manifest_digest, "billing_mode": manifest["billing_mode"], "rows": rows, "resumed_rows": sum(row["resumed"] for row in rows), "resume_sources": manifest["resume_sources"], "repeats_per_trajectory": _REPEATS,
         "task_success": {"stock_mean": sum(stock_scores) / len(stock_scores), "scroll_mean": sum(scroll_scores) / len(scroll_scores), "paired_delta_by_trajectory": dict(zip((item.identifier for item in items), task_deltas)), "paired_bootstrap_resamples": _BOOTSTRAP_RESAMPLES, "paired_delta_lower_95": lower_bound, "meets_minus_five_point_gate": lower_bound >= -0.05},
         "performance_seconds": {"scroll_manual_selection_p95": _percentile(manual_selection, 0.95), "scroll_cache_rebuild_p95": _percentile(cache_rebuild, 0.95), "meets_selection_gate": _percentile(manual_selection, 0.95) < 0.5, "meets_rebuild_gate": _percentile(cache_rebuild, 0.95) < 2.0},
     }
@@ -293,9 +300,9 @@ def main() -> None:
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--runtime-root", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--resume-runtime-root", required=True, type=Path)
+    parser.add_argument("--resume-runtime-root", required=True, action="append", type=Path)
     args = parser.parse_args()
-    report = run_coding_evaluation(args.manifest, runtime_root=args.runtime_root, output_path=args.output, resume_runtime_root=args.resume_runtime_root)
+    report = run_coding_evaluation(args.manifest, runtime_root=args.runtime_root, output_path=args.output, resume_runtime_roots=tuple(args.resume_runtime_root))
     print(json.dumps({"manifest_sha256": report["manifest_sha256"], "billing_mode": report["billing_mode"], "rows": len(report["rows"])}, sort_keys=True))
 
 

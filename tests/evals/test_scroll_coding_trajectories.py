@@ -58,29 +58,33 @@ def test_coding_statistics_are_paired_and_deterministic():
 
 
 def test_coding_resume_accepts_only_complete_bounded_worker_results(tmp_path, monkeypatch):
-    result = tmp_path / "result.json"
+    root = tmp_path / "r4"
+    result = root / "jobs" / "job" / "result.json"
+    result.parent.mkdir(parents=True)
     result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}), encoding="utf-8")
     manifest = {"input_token_budget": 10, "output_token_budget": 10, "cache_read_token_budget": 10}
-    attestation = {"jobs": {"job": {"result_sha256": "a" * 64, "workspace_sha256": "b" * 64}}}
+    attestation = {"jobs": {"job": {"runtime_root_name": "r4", "result_sha256": "a" * 64, "workspace_sha256": "b" * 64}}}
     monkeypatch.setattr("evals.scroll.coding_live.verify_workspace", lambda _workspace: True)
     monkeypatch.setattr("evals.scroll.coding_live._sha256_file", lambda _path: "a" * 64)
     monkeypatch.setattr("evals.scroll.coding_live._workspace_sha256", lambda _path: "b" * 64)
 
-    assert _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "job") == {"answer": "verified-pass", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "elapsed_seconds": None, "scenario_latency_seconds": 0.5, "resumed": True}
-    assert _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "unlisted") is None
+    assert _resumable_coding_result({"r4": root}, manifest, attestation, "job") == {"answer": "verified-pass", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "elapsed_seconds": None, "scenario_latency_seconds": 0.5, "resumed": True}
+    assert _resumable_coding_result({"r4": root}, manifest, attestation, "unlisted") is None
     result.write_text(json.dumps({"answer": "", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}), encoding="utf-8")
-    assert _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "job") is None
+    assert _resumable_coding_result({"r4": root}, manifest, attestation, "job") is None
 
 
 def test_coding_resume_rejects_tampered_artifacts(tmp_path, monkeypatch):
-    result = tmp_path / "result.json"
+    root = tmp_path / "r4"
+    result = root / "jobs" / "job" / "result.json"
+    result.parent.mkdir(parents=True)
     result.write_text(json.dumps({"answer": "done", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}), encoding="utf-8")
     manifest = {"input_token_budget": 10, "output_token_budget": 10, "cache_read_token_budget": 10}
-    attestation = {"jobs": {"job": {"result_sha256": "a" * 64, "workspace_sha256": "b" * 64}}}
+    attestation = {"jobs": {"job": {"runtime_root_name": "r4", "result_sha256": "a" * 64, "workspace_sha256": "b" * 64}}}
     monkeypatch.setattr("evals.scroll.coding_live._sha256_file", lambda _path: "c" * 64)
 
     with pytest.raises(LiveRunError, match="does not match"):
-        _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "job")
+        _resumable_coding_result({"r4": root}, manifest, attestation, "job")
 
 
 def test_coding_resume_attestation_binds_the_frozen_source(tmp_path, monkeypatch):
@@ -88,10 +92,10 @@ def test_coding_resume_attestation_binds_the_frozen_source(tmp_path, monkeypatch
     attestation = {"schema_version": 1, **source, "jobs": {}}
     path = tmp_path / "attestation.json"
     path.write_text(json.dumps(attestation), encoding="utf-8")
-    manifest = {"resume_attestation_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "resume_source": source}
-    monkeypatch.setattr("evals.scroll.coding_live._RESUME_ATTESTATION_PATH", Path("attestation.json"))
+    manifest = {"resume_sources": {"r4": {**source, "attestation_file": "attestation.json", "attestation_sha256": hashlib.sha256(path.read_bytes()).hexdigest()}}}
+    monkeypatch.setattr("evals.scroll.coding_live._RESUME_ATTESTATION_DIRECTORY", Path("."))
 
-    assert _resume_attestation(manifest, tmp_path) == attestation
-    manifest["resume_source"] = {**source, "worker_timeout_seconds": 1201}
+    assert _resume_attestation(manifest, tmp_path) == {"jobs": {}}
+    manifest["resume_sources"] = {"r4": {**manifest["resume_sources"]["r4"], "worker_timeout_seconds": 1201}}
     with pytest.raises(LiveRunError, match="does not match"):
         _resume_attestation(manifest, tmp_path)
