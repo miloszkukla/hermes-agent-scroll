@@ -119,6 +119,8 @@ def run_coding_evaluation(
 ) -> dict[str, Any]:
     manifest = _read_manifest(manifest_path)
     validate_live_manifest(manifest)
+    if manifest["schema_version"] != 2:
+        raise LiveRunError("coding evaluation requires schema_version 2")
     verify_manifest_provenance(manifest, Path(__file__).resolve().parents[2])
     if manifest["agent_prompt_sha256"] != coding_prompt_sha256():
         raise LiveRunError("coding manifest does not freeze this executor's agent prompt")

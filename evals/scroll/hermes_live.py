@@ -587,6 +587,8 @@ def run_live_evaluation(
     if not isinstance(manifest, dict):
         raise LiveRunError("live manifest must be a JSON object")
     validate_live_manifest(manifest)
+    if manifest["schema_version"] != 1:
+        raise LiveRunError("memory evaluation requires schema_version 1")
     repository_root = Path(__file__).resolve().parents[2]
     verify_manifest_provenance(manifest, repository_root)
     if manifest["agent_prompt_sha256"] != agent_prompt_sha256():

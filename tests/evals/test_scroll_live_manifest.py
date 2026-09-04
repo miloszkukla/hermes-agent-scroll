@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from evals.scroll.coding_live import run_coding_evaluation
+from evals.scroll.hermes_live import LiveRunError, run_live_evaluation
 from evals.scroll.live_manifest import LiveManifestError, validate_live_manifest
 
 
@@ -79,3 +81,19 @@ def test_live_manifest_template_is_not_live_evaluation_authorization():
 
     with pytest.raises(LiveManifestError, match="explicitly true"):
         validate_live_manifest(template)
+
+
+def test_live_evaluators_bind_their_manifest_schema_before_provenance_or_auth(tmp_path):
+    coding = _manifest()
+    coding_path = tmp_path / "coding.json"
+    coding_path.write_text(json.dumps(coding), encoding="utf-8")
+
+    with pytest.raises(LiveRunError, match="coding evaluation requires schema_version 2"):
+        run_coding_evaluation(coding_path, runtime_root=tmp_path / "coding-runtime", output_path=tmp_path / "coding-report.json")
+
+    memory = {**_manifest(), "schema_version": 2, "context_total_ceiling_seconds": 900}
+    memory_path = tmp_path / "memory.json"
+    memory_path.write_text(json.dumps(memory), encoding="utf-8")
+
+    with pytest.raises(LiveRunError, match="memory evaluation requires schema_version 1"):
+        run_live_evaluation(memory_path, longmemeval_path=tmp_path / "longmemeval.json", beam_chats_root=tmp_path / "beam", scroll_source=tmp_path / "scroll", runtime_root=tmp_path / "memory-runtime", output_path=tmp_path / "memory-report.json")
