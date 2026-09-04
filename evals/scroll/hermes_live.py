@@ -184,7 +184,7 @@ def _enabled_toolsets(arm: str, coding: bool) -> list[str]:
     if arm not in {"stock", "scroll"}:
         raise LiveRunError(f"unknown evaluation arm: {arm}")
     if coding:
-        return ["coding", "context_engine"] if arm == "scroll" else ["coding"]
+        return ["terminal", "file", "context_engine"] if arm == "scroll" else ["terminal", "file"]
     return ["context_engine"] if arm == "scroll" else []
 
 
@@ -337,13 +337,8 @@ def _configure_coding_workspace(workspace: Path, session_id: str, register: Any)
     register(session_id, {"cwd": str(workspace)})
 
 
-def _worker_result(job_path: Path) -> None:
-    job = _read_json(job_path)
-    runtime_home = Path(job["runtime_home"])
-    runtime_home.mkdir(parents=True, exist_ok=True)
-    credential_home = Path(job["credential_home"])
-    _bind_worker_oauth(runtime_home, credential_home)
-    (runtime_home / "config.yaml").write_text(
+def _worker_config(job: Mapping[str, Any]) -> str:
+    return (
         "model:\n"
         f"  context_length: {job['context_window']}\n"
         "context:\n"
@@ -351,15 +346,25 @@ def _worker_result(job_path: Path) -> None:
         "compression:\n"
         "  enabled: true\n"
         "  threshold: 0.75\n"
+        "approvals:\n"
+        "  mode: \"off\"\n"
         "auxiliary:\n"
         "  compression:\n"
         "    provider: openai-codex\n"
         f"    model: {job['model']}\n"
         "    api_mode: codex_responses\n"
         "    reasoning_effort: none\n"
-        f"    max_output_tokens: {job['max_output_tokens']}\n",
-        encoding="utf-8",
+        f"    max_output_tokens: {job['max_output_tokens']}\n"
     )
+
+
+def _worker_result(job_path: Path) -> None:
+    job = _read_json(job_path)
+    runtime_home = Path(job["runtime_home"])
+    runtime_home.mkdir(parents=True, exist_ok=True)
+    credential_home = Path(job["credential_home"])
+    _bind_worker_oauth(runtime_home, credential_home)
+    (runtime_home / "config.yaml").write_text(_worker_config(job), encoding="utf-8")
     os.environ["HERMES_HOME"] = str(runtime_home)
     coding = job.get("lane") == "coding"
     workspace = None

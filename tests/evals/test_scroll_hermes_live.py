@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _bind_worker_oauth, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _bind_worker_oauth, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _prepare_coding_scenario, _require_clean_git_checkout, _worker_config, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from toolsets import resolve_toolset
 
 
 def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
@@ -107,6 +108,14 @@ def test_worker_oauth_binding_uses_a_symlink_without_copying_credentials(tmp_pat
         _bind_worker_oauth(runtime_home, credential_home)
 
 
+def test_worker_config_pins_compression_and_disables_smart_approval():
+    config = _worker_config({"arm": "scroll", "model": "gpt-5.6-luna", "context_window": 80000, "max_output_tokens": 4096})
+
+    assert 'mode: "off"' in config
+    assert "provider: openai-codex" in config
+    assert "api_mode: codex_responses" in config
+
+
 @pytest.mark.parametrize("usage", [{}, {"input_tokens": 1, "output_tokens": 1}, {"input_tokens": 0, "output_tokens": 1, "cache_read_tokens": 0}, {"input_tokens": 1, "output_tokens": 0, "cache_read_tokens": 0}])
 def test_memory_judge_rejects_incomplete_or_nonpositive_usage(monkeypatch, tmp_path, usage):
     item = EvaluationItem("longmemeval/case-1", "longmemeval", "single-session-user", "Which?", (), {"answer": "private"})
@@ -158,11 +167,14 @@ def test_coding_scenarios_drive_manual_selection_and_cold_rebuild(tmp_path):
     assert not (tmp_path / "cache" / "scroll").exists()
 
 
-def test_coding_arms_request_the_coding_toolset_and_scroll_context_engine():
-    assert _enabled_toolsets("stock", True) == ["coding"]
-    assert _enabled_toolsets("scroll", True) == ["coding", "context_engine"]
+def test_coding_arms_expose_only_local_editing_tools_and_scroll_context_engine():
+    assert _enabled_toolsets("stock", True) == ["terminal", "file"]
+    assert _enabled_toolsets("scroll", True) == ["terminal", "file", "context_engine"]
     assert _enabled_toolsets("stock", False) == []
     assert _enabled_toolsets("scroll", False) == ["context_engine"]
+    coding_tools = set().union(*(resolve_toolset(toolset, include_registry=False) for toolset in _enabled_toolsets("stock", True)))
+    assert coding_tools == {"terminal", "process", "read_file", "write_file", "patch", "search_files"}
+    assert not coding_tools & {"delegate_task", "vision_analyze", "browser_vision", "browser_navigate"}
     with pytest.raises(LiveRunError, match="unknown evaluation arm"):
         _enabled_toolsets("other", True)
 
