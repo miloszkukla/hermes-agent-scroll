@@ -2,7 +2,7 @@
 
 ## Status
 
-**PAUSED pending focused review for a fresh replacement coding lane.** The controlled memory
+**GO — the attested replacement coding lane is authorized.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -60,13 +60,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `a3aa933901da6b57f5763c448235e518e0561985` |
+| Coding implementation commit | `20e838f7246f1bdade05d82e4e0f6de2df00dc50` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding report manifest digest (canonical JSON SHA-256) | `6f9bc2fca6984f3345d89e914c43d797764fa8ff5db8a4c236989fc8d5a297b7` |
+| Coding report manifest digest (canonical JSON SHA-256) | `d42ed46a8fe89b9835131433f54d140d2a3ccea2f0fafde330aabc48722572f3` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -200,6 +200,20 @@ The reviewer then found that the objective verifier could write Python or
 pytest cache files after the workspace hash check. Candidate
 `a3aa933901da6b57f5763c448235e518e0561985` disables both writes and regresses
 that the full workspace tree remains unchanged during verification.
+
+## Attested resume gate
+
+Independent reviewer: `/root/final_fresh_review`.
+
+On 2026-09-04, the reviewer checked implementation commit
+`a3aa933901da6b57f5763c448235e518e0561985` and evidence commit
+`67160af88df7ab4281eef8c31b53c087053a694a`. It verified the source-envelope
+binding, all 28 result/workspace hashes, fresh execution for unlisted r4 jobs,
+non-mutating objective verification, schema/timeout ordering, report audit
+fields, and manifest provenance. The reviewer reran its focused checks
+(45 passed), Ruff, and `git diff --check`. Disposition: **GO — no actionable
+P0/P1/P2.** Commit `20e838f7246f1bdade05d82e4e0f6de2df00dc50` is documentation
+only: it records the required r4 resume argument in the operator command.
 
 ## Ceiling-schema gate
 
