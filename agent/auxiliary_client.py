@@ -2114,7 +2114,19 @@ class _CodexCompletionsAdapter:
                         daemon=True,
                     ).start()
                     while not stream_consumption_done.wait(0.02):
-                        _check_cancelled()
+                        try:
+                            _check_cancelled()
+                        except AuxiliaryExplicitCancellation:
+                            # A protected compression owner already unwound on
+                            # this cancellation. Keep its provider worker
+                            # orphaned until the attempt timer closes only this
+                            # stream; closing here would affect a concurrent
+                            # user sharing the client.
+                            if not (
+                                callable(protected_cancel_check)
+                                and _captured_aux_cancel_requested(protected_cancel_check)
+                            ):
+                                raise
                     _check_cancelled()
                     if "exception" in stream_consumption:
                         raise stream_consumption["exception"]
