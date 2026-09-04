@@ -708,6 +708,22 @@ class TestAnthropicOAuthFlag:
 
 
 class TestBuildCodexClient:
+    def test_explicit_access_token_bypasses_auth_store_and_credential_pool(self):
+        explicit_token = _jwt_with_claims({"https://api.openai.com/auth": {"chatgpt_account_id": "eval-account"}})
+        with (
+            patch("agent.auxiliary_client._select_pool_entry", side_effect=AssertionError("credential pool should not run")),
+            patch("agent.auxiliary_client._read_codex_access_token", side_effect=AssertionError("auth store should not run")),
+            patch("agent.auxiliary_client.OpenAI") as mock_openai,
+        ):
+            mock_openai.return_value = MagicMock()
+            from agent.auxiliary_client import _build_codex_client
+
+            client, model = _build_codex_client("gpt-5.4", explicit_api_key=explicit_token)
+
+        assert client is not None
+        assert model == "gpt-5.4"
+        assert mock_openai.call_args.kwargs["api_key"] == explicit_token
+
     def test_pool_without_selected_entry_falls_back_to_auth_store(self):
         with (
             patch("agent.auxiliary_client._select_pool_entry", return_value=(True, None)),

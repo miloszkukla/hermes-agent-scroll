@@ -195,3 +195,16 @@ class TestAuxiliaryClientWiring:
             assert headers.get("originator") == "hermes-agent"
             assert headers.get("ChatGPT-Account-ID") == "acct-aux-raw-codex"
             assert headers.get("User-Agent") == f"HermesAgent/{__version__}"
+
+    def test_raw_codex_uses_explicit_access_token_without_auth_store(self, monkeypatch):
+        from agent import auxiliary_client
+        token = _make_codex_jwt("acct-aux-explicit-codex")
+        monkeypatch.setattr(auxiliary_client, "_read_codex_access_token", lambda: (_ for _ in ()).throw(AssertionError("auth store should not run")))
+        with patch("agent.auxiliary_client.OpenAI") as mock_openai:
+            mock_openai.return_value = MagicMock()
+            client, model = auxiliary_client.resolve_provider_client(
+                "openai-codex", model="gpt-5.4", raw_codex=True, explicit_api_key=token,
+            )
+        assert client is not None
+        assert model == "gpt-5.4"
+        assert mock_openai.call_args.kwargs["api_key"] == token

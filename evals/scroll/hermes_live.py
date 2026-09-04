@@ -39,6 +39,7 @@ CODING_SYSTEM_PROMPT = (
     "Work on the requested coding task in the current workspace. Use the terminal to inspect "
     "the files and tests, make the smallest correct fix, run the focused tests, and report the result."
 )
+_WORKER_ACCESS_TOKEN_MINIMUM_TTL_SECONDS = 1_260
 
 
 class LiveRunError(RuntimeError):
@@ -298,7 +299,7 @@ def verify_memory_inputs(manifest: Mapping[str, Any], longmemeval_path: Path, be
 
 def _build_live_agent(factory: Any, job: Mapping[str, Any], session_id: str, db: Any, toolsets: list[str]) -> Any:
     return factory(
-        provider="openai-codex", api_mode="codex_responses", model=job["model"], session_id=session_id, session_db=db,
+        provider="openai-codex", api_key=job["api_key"], api_mode="codex_responses", model=job["model"], session_id=session_id, session_db=db,
         enabled_toolsets=toolsets, quiet_mode=True, skip_context_files=True, skip_memory=True,
         skip_background_review=True, platform="cli", max_iterations=int(job["max_iterations"]),
         max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False}, fallback_model=[],
@@ -318,16 +319,26 @@ def _require_chatgpt_codex_oauth(hermes_home: Path) -> None:
         raise LiveRunError("ChatGPT Codex OAuth credential is unavailable")
 
 
-def _bind_worker_oauth(runtime_home: Path, credential_home: Path) -> None:
-    credential_store = credential_home / "auth.json"
-    worker_store = runtime_home / "auth.json"
-    if not credential_store.is_file():
-        raise LiveRunError("ChatGPT Codex OAuth credential store is unavailable")
-    if worker_store.exists() or worker_store.is_symlink():
-        if not worker_store.is_symlink() or worker_store.resolve() != credential_store.resolve():
-            raise LiveRunError("worker OAuth credential binding is invalid")
-        return
-    worker_store.symlink_to(credential_store)
+def _lease_chatgpt_codex_access_token(hermes_home: Path, resolver: Any = None) -> str:
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    from hermes_cli.auth import resolve_codex_runtime_credentials
+
+    token = set_hermes_home_override(hermes_home)
+    try:
+        credentials = (resolver or resolve_codex_runtime_credentials)(refresh_if_expiring=True, refresh_skew_seconds=_WORKER_ACCESS_TOKEN_MINIMUM_TTL_SECONDS)
+    finally:
+        reset_hermes_home_override(token)
+    if credentials.get("source") != "hermes-auth-store":
+        raise LiveRunError("evaluation requires a parent-managed ChatGPT Codex OAuth store")
+    api_key = credentials.get("api_key")
+    if not isinstance(api_key, str) or not api_key.strip():
+        raise LiveRunError("parent-managed ChatGPT Codex OAuth lease is unavailable")
+    return api_key.strip()
+
+
+def _isolated_subprocess_environment() -> dict[str, str]:
+    repository_root = Path(__file__).resolve().parents[2]
+    return {"HOME": "/tmp", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "PATH": os.pathsep.join((str(Path(sys.executable).parent), os.defpath)), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1", "PYTHONPATH": str(repository_root)}
 
 
 def _configure_coding_workspace(workspace: Path, session_id: str, register: Any) -> None:
@@ -360,17 +371,21 @@ def _worker_config(job: Mapping[str, Any]) -> str:
 
 def _worker_result(job_path: Path) -> None:
     job = _read_json(job_path)
+    api_key = job.get("api_key")
+    if not isinstance(api_key, str) or not api_key.strip():
+        raise LiveRunError("worker access-token lease is unavailable")
+    try:
+        job_path.unlink()
+    except OSError as exc:
+        raise LiveRunError("worker access-token lease could not be removed") from exc
     runtime_home = Path(job["runtime_home"])
     runtime_home.mkdir(parents=True, exist_ok=True)
-    credential_home = Path(job["credential_home"])
-    _bind_worker_oauth(runtime_home, credential_home)
     (runtime_home / "config.yaml").write_text(_worker_config(job), encoding="utf-8")
     os.environ["HERMES_HOME"] = str(runtime_home)
     coding = job.get("lane") == "coding"
     workspace = None
     if coding:
         workspace = Path(str(job.get("workspace") or ""))
-    _require_chatgpt_codex_oauth(runtime_home)
     from hermes_state import SessionDB
     from run_agent import AIAgent
 
@@ -448,7 +463,7 @@ def usage_value(value, name):
 
 class Judge:
     def __init__(self):
-        self.client, self.model = resolve_provider_client("openai-codex", payload["model"], api_mode="codex_responses")
+        self.client, self.model = resolve_provider_client("openai-codex", payload["model"], explicit_api_key=payload["api_key"], api_mode="codex_responses")
         if self.client is None or not self.model:
             raise RuntimeError("ChatGPT Codex OAuth judge client is unavailable")
     def invoke(self, prompt):
@@ -481,22 +496,22 @@ print(json.dumps({"score": score, "usage": usage}))
 '''
 
 
-def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], source_python: Path, scroll_source: Path, credential_home: Path) -> dict[str, Any]:
+def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], source_python: Path, scroll_source: Path, api_key: str) -> dict[str, Any]:
     payload = {
         "benchmark": item.benchmark, "question_type": item.question_type, "gold": item.gold, "answer": answer,
-        "model": manifest["judge_model"], "max_output_tokens": manifest["max_output_tokens"],
+        "model": manifest["judge_model"], "max_output_tokens": manifest["max_output_tokens"], "api_key": api_key,
     }
-    judge_env = os.environ.copy()
-    judge_env["HERMES_HOME"] = str(credential_home)
-    judge_env["PYTHONPATH"] = os.pathsep.join(filter(None, (str(Path(__file__).resolve().parents[2]), judge_env.get("PYTHONPATH"))))
-    try:
-        process = subprocess.run(
-            [str(source_python), "-c", _JUDGE_PROGRAM], input=json.dumps(payload), text=True,
-            cwd=scroll_source, env=judge_env, capture_output=True, check=True, timeout=600,
-        )
-        result = json.loads(process.stdout)
-    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
-        raise LiveRunError(f"pinned {item.benchmark} judge failed") from exc
+    with tempfile.TemporaryDirectory(prefix="scroll-eval-judge-") as judge_home:
+        judge_env = _isolated_subprocess_environment()
+        judge_env["HERMES_HOME"] = judge_home
+        try:
+            process = subprocess.run(
+                [str(source_python), "-c", _JUDGE_PROGRAM], input=json.dumps(payload), text=True,
+                cwd=scroll_source, env=judge_env, capture_output=True, check=True, timeout=600,
+            )
+            result = json.loads(process.stdout)
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
+            raise LiveRunError(f"pinned {item.benchmark} judge failed") from exc
     usage = result.get("usage") if isinstance(result, dict) else None
     if not isinstance(result, dict) or not isinstance(result.get("score"), (int, float)) or isinstance(result["score"], bool) or not isinstance(usage, dict):
         raise LiveRunError(f"pinned {item.benchmark} judge returned an invalid result")
@@ -561,10 +576,10 @@ def run_live_evaluation(
             "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
             "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
             "history": item.history, "probe": item.public_probe, "runtime_home": str(job_root / "home"),
-            "credential_home": str(credential_home), "result_path": str(result_path),
+            "api_key": _lease_chatgpt_codex_access_token(credential_home), "result_path": str(result_path),
         }), encoding="utf-8")
         try:
-            subprocess.run([sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(job_path)], cwd=Path(__file__).resolve().parents[2], check=True, capture_output=True, text=True, timeout=900)
+            subprocess.run([sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(job_path)], cwd=Path(__file__).resolve().parents[2], env=_isolated_subprocess_environment(), check=True, capture_output=True, text=True, timeout=900)
             result = _read_json(result_path)
         except (OSError, subprocess.SubprocessError, LiveRunError) as exc:
             raise LiveRunError(f"Hermes {arm} arm failed for {item.identifier}") from exc
@@ -576,7 +591,7 @@ def run_live_evaluation(
         item = by_id.get(str(probe.get("id")))
         if item is None:
             raise LiveRunError("judge received an unfrozen probe")
-        return _judge_item(item, answer, manifest, source_python, scroll_source, credential_home)
+        return _judge_item(item, answer, manifest, source_python, scroll_source, _lease_chatgpt_codex_access_token(credential_home))
 
     try:
         report = run_paired_evaluation(manifest, [item.public_probe for item in items], execute, judge)

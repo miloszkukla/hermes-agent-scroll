@@ -17,12 +17,13 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .coding_trajectories import CANONICAL_HISTORY_MIN_TOKENS, TRAJECTORIES, by_identifier, canonical_history_tokens, verify_workspace, write_workspace
-from .hermes_live import LiveRunError, _require_chatgpt_codex_oauth, coding_prompt_sha256, verify_manifest_provenance
+from .hermes_live import LiveRunError, _lease_chatgpt_codex_access_token, _require_chatgpt_codex_oauth, coding_prompt_sha256, verify_manifest_provenance
 from .live_manifest import validate_live_manifest
 
 
 _REPEATS = 5
 _BOOTSTRAP_RESAMPLES = 10_000
+_SANDBOX_JOB_ROOT = Path("/work")
 
 
 def _read_manifest(path: Path) -> dict[str, Any]:
@@ -85,14 +86,21 @@ def _sandboxed_worker_command(job_root: Path, job_path: Path, workspace: Path) -
     job_path = job_path.resolve()
     workspace = workspace.resolve()
     repository_root = Path(__file__).resolve().parents[2]
-    environment = os.environ.copy()
-    environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    environment["PYTHONPATH"] = os.pathsep.join(filter(None, (str(repository_root), environment.get("PYTHONPATH"))))
+    try:
+        repository_parts = repository_root.relative_to("/home").parts
+    except ValueError as exc:
+        raise LiveRunError("coding evaluation source must be beneath /home") from exc
+    home_directories = []
+    current = Path("/home")
+    for part in repository_parts[:-1]:
+        current /= part
+        home_directories.extend(("--dir", str(current)))
+    environment = {"HOME": "/tmp", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "PATH": os.pathsep.join((str(Path(sys.executable).parent), os.defpath)), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1", "PYTHONPATH": str(repository_root)}
     return [
         bwrap, "--die-with-parent", "--new-session", "--unshare-pid",
-        "--ro-bind", "/", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp",
-        "--bind", str(job_root), str(job_root), "--chdir", str(workspace),
-        sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(job_path),
+        "--ro-bind", "/usr", "/usr", "--ro-bind", "/usr/local", "/usr/local", "--ro-bind", "/lib", "/lib", "--ro-bind", "/lib64", "/lib64", "--ro-bind", "/bin", "/bin", "--ro-bind", "/sbin", "/sbin", "--ro-bind", "/etc", "/etc", "--tmpfs", "/home", *home_directories, "--ro-bind", str(repository_root), str(repository_root), "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp", "--dir", str(_SANDBOX_JOB_ROOT),
+        "--bind", str(job_root), str(_SANDBOX_JOB_ROOT), "--chdir", str(_SANDBOX_JOB_ROOT / "workspace"),
+        sys.executable, "-m", "evals.scroll.hermes_live", "--worker", str(_SANDBOX_JOB_ROOT / "job.json"),
     ], environment
 
 
@@ -123,8 +131,8 @@ def run_coding_evaluation(
         job_path.write_text(json.dumps({
             "lane": "coding", "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
             "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
-            "history": item.history(), "probe": dict(probe), "scenario": item.scenario, "runtime_home": str(job_root / "home"), "workspace": str(workspace),
-            "credential_home": str(credential_home), "result_path": str(result_path),
+            "history": item.history(), "probe": dict(probe), "scenario": item.scenario, "runtime_home": str(_SANDBOX_JOB_ROOT / "home"), "workspace": str(_SANDBOX_JOB_ROOT / "workspace"),
+            "api_key": _lease_chatgpt_codex_access_token(credential_home), "result_path": str(_SANDBOX_JOB_ROOT / "result.json"),
         }), encoding="utf-8")
         started = time.monotonic()
         try:

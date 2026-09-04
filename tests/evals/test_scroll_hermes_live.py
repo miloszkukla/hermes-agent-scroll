@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from evals.scroll.coding_live import _sandboxed_worker_command
-from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _bind_worker_oauth, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _prepare_coding_scenario, _require_clean_git_checkout, _worker_config, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _lease_chatgpt_codex_access_token, _prepare_coding_scenario, _require_clean_git_checkout, _worker_config, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 from toolsets import resolve_toolset
 
 
@@ -82,31 +82,30 @@ def test_live_worker_counts_auxiliary_compression_usage():
         _auxiliary_usage(object(), "session", "gpt-5.6-luna")
 
 
-def test_live_agent_uses_chatgpt_codex_responses_without_fallback():
-    captured = _build_live_agent(lambda **kwargs: kwargs, {"model": "gpt-5.6-luna", "max_iterations": 8, "max_output_tokens": 4096}, "session", object(), ["coding"])
+def test_live_agent_uses_a_parent_leased_chatgpt_codex_token_without_fallback():
+    captured = _build_live_agent(lambda **kwargs: kwargs, {"api_key": "leased-token", "model": "gpt-5.6-luna", "max_iterations": 8, "max_output_tokens": 4096}, "session", object(), ["coding"])
 
     assert captured["provider"] == "openai-codex"
+    assert captured["api_key"] == "leased-token"
     assert captured["api_mode"] == "codex_responses"
     assert captured["fallback_model"] == []
     assert "request_overrides" not in captured
 
 
-def test_worker_oauth_binding_uses_a_symlink_without_copying_credentials(tmp_path):
-    credential_home = tmp_path / "credentials"
-    runtime_home = tmp_path / "runtime"
-    credential_home.mkdir()
-    runtime_home.mkdir()
-    (credential_home / "auth.json").write_text("credential", encoding="utf-8")
+def test_parent_leases_worker_access_tokens_with_refresh_headroom(tmp_path):
+    calls = []
 
-    _bind_worker_oauth(runtime_home, credential_home)
+    def resolver(**kwargs):
+        calls.append(kwargs)
+        return {"source": "hermes-auth-store", "api_key": "leased-token"}
 
-    worker_store = runtime_home / "auth.json"
-    assert worker_store.is_symlink()
-    assert worker_store.resolve() == (credential_home / "auth.json").resolve()
-    (runtime_home / "auth.json").unlink()
-    (runtime_home / "auth.json").write_text("different", encoding="utf-8")
-    with pytest.raises(LiveRunError, match="binding"):
-        _bind_worker_oauth(runtime_home, credential_home)
+    assert _lease_chatgpt_codex_access_token(tmp_path, resolver) == "leased-token"
+    assert calls == [{"refresh_if_expiring": True, "refresh_skew_seconds": 1_260}]
+
+
+def test_parent_rejects_non_store_worker_access_token_sources(tmp_path):
+    with pytest.raises(LiveRunError, match="parent-managed"):
+        _lease_chatgpt_codex_access_token(tmp_path, lambda **_kwargs: {"source": "credential-pool", "api_key": "token"})
 
 
 def test_worker_config_pins_compression_and_disables_smart_approval():
@@ -126,12 +125,14 @@ def test_memory_judge_rejects_incomplete_or_nonpositive_usage(monkeypatch, tmp_p
         captured.update(kwargs)
         return subprocess.CompletedProcess(args, 0, stdout=json.dumps({"score": 1, "usage": usage}))
 
+    monkeypatch.setenv("SCROLL_EVAL_TEST_SECRET", "not-forwarded")
     monkeypatch.setattr("evals.scroll.hermes_live.subprocess.run", run)
     manifest = {"judge_model": "gpt-5.6-luna", "max_output_tokens": 32}
 
     with pytest.raises(LiveRunError, match="usage"):
-        _judge_item(item, "answer", manifest, tmp_path / "python", tmp_path, tmp_path / "credentials")
-    assert captured["env"]["HERMES_HOME"] == str(tmp_path / "credentials")
+        _judge_item(item, "answer", manifest, tmp_path / "python", tmp_path, "leased-token")
+    assert captured["env"]["HERMES_HOME"] != str(tmp_path / "credentials")
+    assert "SCROLL_EVAL_TEST_SECRET" not in captured["env"]
     assert str(Path.cwd()) in captured["env"]["PYTHONPATH"]
 
 
@@ -150,12 +151,18 @@ def test_coding_worker_command_makes_only_its_job_tree_writable(tmp_path, monkey
     job_path = job_root / "job.json"
     workspace.mkdir(parents=True)
     monkeypatch.setattr("evals.scroll.coding_live.shutil.which", lambda name: "/usr/bin/bwrap" if name == "bwrap" else None)
+    monkeypatch.setenv("SCROLL_EVAL_TEST_SECRET", "not-forwarded")
 
     command, environment = _sandboxed_worker_command(job_root, job_path, workspace)
 
-    assert command[:13] == ["/usr/bin/bwrap", "--die-with-parent", "--new-session", "--unshare-pid", "--ro-bind", "/", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
-    assert command[13:18] == ["--bind", str(job_root), str(job_root), "--chdir", str(workspace)]
-    assert command[-4:] == ["-m", "evals.scroll.hermes_live", "--worker", str(job_path)]
+    assert ["--ro-bind", "/", "/"] not in [command[index:index + 3] for index in range(len(command) - 2)]
+    assert ["--tmpfs", "/home"] in [command[index:index + 2] for index in range(len(command) - 1)]
+    assert ["--bind", str(job_root.resolve()), "/work"] in [command[index:index + 3] for index in range(len(command) - 2)]
+    assert ["--chdir", "/work/workspace"] in [command[index:index + 2] for index in range(len(command) - 1)]
+    assert command[-4:] == ["-m", "evals.scroll.hermes_live", "--worker", "/work/job.json"]
+    assert set(environment) == {"HOME", "LANG", "LC_ALL", "PATH", "PYTHONDONTWRITEBYTECODE", "PYTHONNOUSERSITE", "PYTHONPATH"}
+    assert environment["HOME"] == "/tmp"
+    assert "SCROLL_EVAL_TEST_SECRET" not in environment
     assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
     assert str(Path.cwd()) in environment["PYTHONPATH"]
 
@@ -177,9 +184,8 @@ def test_coding_worker_command_resolves_documented_relative_runtime_paths(tmp_pa
 
     command, _environment = _sandboxed_worker_command(job_root, job_path, workspace)
 
-    assert command[14:16] == [str(job_root.resolve()), str(job_root.resolve())]
-    assert command[17] == str(workspace.resolve())
-    assert command[-1] == str(job_path.resolve())
+    assert ["--bind", str(job_root.resolve()), "/work"] in [command[index:index + 3] for index in range(len(command) - 2)]
+    assert command[-1] == "/work/job.json"
 
 
 def test_coding_worker_sandbox_blocks_checkout_writes(tmp_path):
@@ -194,6 +200,7 @@ def test_coding_worker_sandbox_blocks_checkout_writes(tmp_path):
         "Path('allowed').write_text('ok'); "
         "checkout = Path(os.environ['SCROLL_EVAL_CHECKOUT_PATH']); "
         "\nif os.access(checkout, os.W_OK):\n raise RuntimeError('sandbox allowed a checkout write')"
+        "\nif Path('/home/codex/.hermes/auth.json').exists():\n raise RuntimeError('sandbox exposed caller auth')"
     )
 
     subprocess.run([*command[:-4], "-c", program], check=True, capture_output=True, text=True, env=environment)

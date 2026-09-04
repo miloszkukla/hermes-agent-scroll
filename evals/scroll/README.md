@@ -56,11 +56,15 @@ post-cache-loss agent construction separately from provider execution; its p95
 thresholds therefore cover only the required selection/rebuild operations.
 
 Both drivers require an authenticated ChatGPT Codex OAuth credential in the
-caller's Hermes home at run time. Each isolated worker receives a symlink to
-that credential store rather than a copy. The credential, raw corpus histories,
-model answers, generated workspaces, and provider traces stay below the ignored
-runtime root. A durable report has only manifest/hash metadata, objective
-scores, usage, and answer digests.
+caller's Hermes home at run time. The parent alone resolves and refreshes the
+OAuth store, then gives each worker a short-lived access-token lease with enough
+life for its bounded subprocess. Workers and judges never receive `auth.json` or
+a refresh token; the worker deletes its one-use lease file before model tools
+begin. Coding workers run with a sanitized environment, an empty sandboxed
+`/home`, and explicit read-only system/source mounts plus their writable job
+tree. Raw corpus histories, model answers, generated workspaces, and provider
+traces stay below the ignored runtime root. A durable report has only
+manifest/hash metadata, objective scores, usage, and answer digests.
 
 After a recorded `GO`, run the reviewed commands from the repository root:
 
