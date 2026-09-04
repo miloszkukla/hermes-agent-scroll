@@ -57,6 +57,7 @@ def test_coding_resume_accepts_only_complete_bounded_worker_results(tmp_path, mo
     monkeypatch.setattr("evals.scroll.coding_live._workspace_sha256", lambda _path: "b" * 64)
 
     assert _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "job") == {"answer": "verified-pass", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "elapsed_seconds": None, "scenario_latency_seconds": 0.5, "resumed": True}
+    assert _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "unlisted") is None
     result.write_text(json.dumps({"answer": "", "usage": {"input_tokens": 1, "output_tokens": 2, "cache_read_tokens": 3}, "scenario_latency_seconds": 0.5}), encoding="utf-8")
     assert _resumable_coding_result(result, tmp_path / "workspace", manifest, attestation, "job") is None
 
