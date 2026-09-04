@@ -6,18 +6,16 @@ import argparse
 import hashlib
 import json
 import math
-import os
 import random
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Mapping
 
-from hermes_cli.env_loader import load_hermes_dotenv
-
 from .coding_trajectories import CANONICAL_HISTORY_MIN_TOKENS, TRAJECTORIES, by_identifier, canonical_history_tokens, verify_workspace, write_workspace
-from .hermes_live import LiveRunError, coding_prompt_sha256, verify_manifest_provenance
+from .hermes_live import LiveRunError, _require_chatgpt_codex_oauth, coding_prompt_sha256, verify_manifest_provenance
 from .live_manifest import validate_live_manifest
 
 
@@ -59,13 +57,6 @@ def _usage(value: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, f
         if not isinstance(number, (int, float)) or isinstance(number, bool) or number < 0 or number > limit:
             raise LiveRunError(f"coding executor usage.{key} violates the frozen budget")
         result[key] = number
-    cost = raw.get("cost_usd")
-    if not isinstance(cost, (int, float)) or isinstance(cost, bool) or cost < 0:
-        raise LiveRunError("coding executor usage.cost_usd is invalid")
-    expected_cost = result["input_tokens"] * manifest["input_price_per_token"] + result["output_tokens"] * manifest["output_price_per_token"] + result["cache_read_tokens"] * manifest["cache_read_price_per_token"]
-    if not math.isclose(float(cost), expected_cost, rel_tol=0.0, abs_tol=1e-12):
-        raise LiveRunError("coding executor usage.cost_usd does not match frozen prices")
-    result["cost_usd"] = expected_cost
     return result
 
 
@@ -95,9 +86,7 @@ def run_coding_evaluation(
         raise LiveRunError("coding manifest does not freeze this executor's agent prompt")
     if not credential_home.is_dir():
         raise LiveRunError("credential home is unavailable")
-    load_hermes_dotenv(hermes_home=credential_home, load_external_secrets=False)
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        raise LiveRunError("OpenRouter credential was not loaded")
+    _require_chatgpt_codex_oauth(credential_home)
     items = _items(manifest)
     scenarios = {item.identifier: item.scenario for item in items}
     runtime_root.mkdir(parents=True, exist_ok=True)
@@ -111,8 +100,7 @@ def run_coding_evaluation(
         job_path = job_root / "job.json"
         job_path.write_text(json.dumps({
             "lane": "coding", "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
-            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
-            "input_price_per_token": manifest["input_price_per_token"], "output_price_per_token": manifest["output_price_per_token"], "cache_read_price_per_token": manifest["cache_read_price_per_token"],
+            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
             "history": item.history(), "probe": dict(probe), "scenario": item.scenario, "runtime_home": str(job_root / "home"), "workspace": str(workspace),
             "credential_home": str(credential_home), "result_path": str(result_path),
         }), encoding="utf-8")
@@ -129,20 +117,32 @@ def run_coding_evaluation(
             raise LiveRunError(f"Hermes {arm} coding arm did not record scenario latency")
         return {"answer": "verified-pass" if verify_workspace(workspace) else "verified-fail", "usage": _usage(result, manifest), "elapsed_seconds": time.monotonic() - started, "scenario_latency_seconds": float(scenario_latency)}
 
-    rows = []
-    total_cost = 0.0
+    def run_one(index: int, item, repeat: int, arm: str) -> tuple[int, dict[str, Any]]:
+        outcome = execute(arm, item, repeat)
+        return index, {"task_id": item.identifier, "repeat": repeat + 1, "arm": arm, "score": float(outcome["answer"] == "verified-pass"), "answer_sha256": hashlib.sha256(outcome["answer"].encode()).hexdigest(), "usage": outcome["usage"], "elapsed_seconds": outcome["elapsed_seconds"], "scenario_latency_seconds": outcome["scenario_latency_seconds"]}
+
+    jobs = [(index, item, repeat, arm) for index, (item, repeat, arm) in enumerate((item, repeat, arm) for item in items for repeat in range(_REPEATS) for arm in ("stock", "scroll"))]
+    rows_by_index = {}
+    executor = ThreadPoolExecutor(max_workers=manifest["max_parallel_workers"])
+    futures = []
+    try:
+        futures = [executor.submit(run_one, *job) for job in jobs]
+        for future in as_completed(futures):
+            index, row = future.result()
+            rows_by_index[index] = row
+    except Exception:
+        for future in futures:
+            future.cancel()
+        raise
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
+    rows = [rows_by_index[index] for index, _, _, _ in jobs]
     paired = {item.identifier: [] for item in items}
     for item in items:
-        for repeat in range(_REPEATS):
-            outcomes = {}
-            for arm in ("stock", "scroll"):
-                outcome = execute(arm, item, repeat)
-                total_cost += float(outcome["usage"]["cost_usd"])
-                if total_cost > manifest["cost_ceiling_usd"]:
-                    raise LiveRunError("coding evaluation exceeded frozen cost_ceiling_usd")
-                score = float(outcome["answer"] == "verified-pass")
-                outcomes[arm] = score
-                rows.append({"task_id": item.identifier, "repeat": repeat + 1, "arm": arm, "score": score, "answer_sha256": hashlib.sha256(outcome["answer"].encode()).hexdigest(), "usage": outcome["usage"], "elapsed_seconds": outcome["elapsed_seconds"], "scenario_latency_seconds": outcome["scenario_latency_seconds"]})
+        for repeat in range(1, _REPEATS + 1):
+            outcomes = {row["arm"]: row["score"] for row in rows if row["task_id"] == item.identifier and row["repeat"] == repeat}
+            if set(outcomes) != {"stock", "scroll"}:
+                raise LiveRunError("coding evaluation requires complete paired outcomes")
             paired[item.identifier].append(outcomes["scroll"] - outcomes["stock"])
     task_deltas = [sum(paired[item.identifier]) / _REPEATS for item in items]
     stock_scores = [row["score"] for row in rows if row["arm"] == "stock"]
@@ -152,7 +152,7 @@ def run_coding_evaluation(
     lower_bound = paired_bootstrap_lower_bound(task_deltas, seed=int(manifest["seed"]))
     manifest_digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     report = {
-        "manifest_sha256": manifest_digest, "total_cost_usd": total_cost, "rows": rows, "repeats_per_trajectory": _REPEATS,
+        "manifest_sha256": manifest_digest, "billing_mode": manifest["billing_mode"], "rows": rows, "repeats_per_trajectory": _REPEATS,
         "task_success": {"stock_mean": sum(stock_scores) / len(stock_scores), "scroll_mean": sum(scroll_scores) / len(scroll_scores), "paired_delta_by_trajectory": dict(zip((item.identifier for item in items), task_deltas)), "paired_bootstrap_resamples": _BOOTSTRAP_RESAMPLES, "paired_delta_lower_95": lower_bound, "meets_minus_five_point_gate": lower_bound >= -0.05},
         "performance_seconds": {"scroll_manual_selection_p95": _percentile(manual_selection, 0.95), "scroll_cache_rebuild_p95": _percentile(cache_rebuild, 0.95), "meets_selection_gate": _percentile(manual_selection, 0.95) < 0.5, "meets_rebuild_gate": _percentile(cache_rebuild, 0.95) < 2.0},
     }
@@ -173,7 +173,7 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
     report = run_coding_evaluation(args.manifest, runtime_root=args.runtime_root, output_path=args.output)
-    print(json.dumps({"manifest_sha256": report["manifest_sha256"], "total_cost_usd": report["total_cost_usd"], "rows": len(report["rows"])}, sort_keys=True))
+    print(json.dumps({"manifest_sha256": report["manifest_sha256"], "billing_mode": report["billing_mode"], "rows": len(report["rows"])}, sort_keys=True))
 
 
 if __name__ == "__main__":

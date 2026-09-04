@@ -32,10 +32,11 @@ a driver opens a provider connection. The validator rejects incomplete fields,
 unequal stock/plugin settings, and credential-shaped keys.
 
 `paired_runner.py` is the credential-free orchestration seam shared by the
-live drivers. It validates the approved manifest, runs stock and Scroll in the
-same ordered item set, caps agent and judge usage against one aggregate ceiling,
-exposes only `id`/`type`/`question` to an agent executor, and retains answer
-digests plus scores instead of raw histories, answers, or gold.
+live drivers. It validates the approved manifest, runs at most four isolated
+workers concurrently, preserves deterministic stock/Scroll row order, caps
+every agent and judge call against token budgets, exposes only
+`id`/`type`/`question` to an agent executor, and retains answer digests plus
+scores instead of raw histories, answers, or gold.
 
 ## Authorized live lanes
 
@@ -54,11 +55,12 @@ repeats. The coding report measures manual host-compaction selection and
 post-cache-loss agent construction separately from provider execution; its p95
 thresholds therefore cover only the required selection/rebuild operations.
 
-Both drivers load `OPENROUTER_API_KEY` only from the caller's Hermes home at
-run time. The key, raw corpus histories, model answers, generated workspaces,
-and provider traces stay below the ignored runtime root. A durable report has
-only manifest/hash metadata, aggregate cost, objective scores, usage, and
-answer digests.
+Both drivers require an authenticated ChatGPT Codex OAuth credential in the
+caller's Hermes home at run time. Each isolated worker receives a symlink to
+that credential store rather than a copy. The credential, raw corpus histories,
+model answers, generated workspaces, and provider traces stay below the ignored
+runtime root. A durable report has only manifest/hash metadata, objective
+scores, usage, and answer digests.
 
 After a recorded `GO`, run the reviewed commands from the repository root:
 
@@ -78,12 +80,12 @@ python -m evals.scroll.coding_live \
 ```
 
 The memory manifest pins the exact Scroll source revision and the upstream
-judge model. Its aggregate cost includes both Hermes arms, any stock-compressor
-auxiliary call, and every judge call.
-The coding manifest declares `none-objective-verifier` as a non-model judge;
-its cost is solely the two agent arms. Any changed source, model, prompt,
-dataset, task set, budget, seed, or manifest requires a new review gate and a
-new paired run. Both live drivers fail closed if the candidate checkout, the
-pinned Scroll judge source, or the tracked LongMemEval/BEAM source trees have
-changed; the LongMemEval corpus file is additionally SHA-256 pinned and the
-judge environment must import `scroll_eval` from the pinned source checkout.
+judge model. Both Hermes arms, every auxiliary compression call, and every
+judge call must use the declared OpenAI Codex model; any other provider or
+model fails the run. The coding manifest declares `none-objective-verifier` as
+a non-model judge. Any changed source, model, prompt, dataset, task set,
+budget, seed, parallelism, or manifest requires a new review gate and a new
+paired run. Both live drivers fail closed if the candidate checkout, the pinned
+Scroll judge source, or the tracked LongMemEval/BEAM source trees have changed;
+the LongMemEval corpus file is additionally SHA-256 pinned and the judge
+environment must import `scroll_eval` from the pinned source checkout.

@@ -16,24 +16,21 @@ def _manifest():
         "plan_sha256": "b" * 64,
         "credential_free_manifest_sha256": "c" * 64,
         "agent_prompt_sha256": "d" * 64,
-        "provider": "mock-provider",
-        "authentication_mode": "interactive-approved",
-        "agent_model": "agent-model",
-        "judge_model": "judge-model",
+        "provider": "openai-codex",
+        "authentication_mode": "chatgpt-codex-oauth",
+        "billing_mode": "chatgpt_subscription",
+        "agent_model": "gpt-5.6-luna",
+        "judge_model": "gpt-5.6-luna",
         "judge_source": "pinned-source",
-        "service_tier": "flex",
         "temperature": 0,
         "seed": 1,
         "context_window_tokens": 100,
         "max_iterations": 2,
         "max_output_tokens": 25,
+        "max_parallel_workers": 2,
         "input_token_budget": 100,
         "output_token_budget": 50,
         "cache_read_token_budget": 100,
-        "input_price_per_token": 0.000001,
-        "output_price_per_token": 0.000002,
-        "cache_read_price_per_token": 0.0000001,
-        "cost_ceiling_usd": 1.5,
         "source_revisions": {"source": "locked"},
         "licenses": {"source": "MIT"},
         "datasets": [{"name": "longmemeval", "revision": "abc", "item_ids": ["item-1"]}],
@@ -64,8 +61,10 @@ def test_live_manifest_requires_a_frozen_symmetric_credential_free_shape():
             validate_live_manifest(nested_credential)
     with pytest.raises(LiveManifestError, match="temperature"):
         validate_live_manifest({**_manifest(), "temperature": True})
-    with pytest.raises(LiveManifestError, match="service_tier"):
-        validate_live_manifest({**_manifest(), "service_tier": "unfrozen"})
+    with pytest.raises(LiveManifestError, match="ChatGPT Codex"):
+        validate_live_manifest({**_manifest(), "provider": "openrouter"})
+    with pytest.raises(LiveManifestError, match="integer"):
+        validate_live_manifest({**_manifest(), "max_parallel_workers": 1.5})
     with pytest.raises(LiveManifestError, match="budgets"):
         validate_live_manifest({**_manifest(), "max_output_tokens": 0})
     with pytest.raises(LiveManifestError, match="budgets"):

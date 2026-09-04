@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from .live_manifest import LiveManifestError, validate_live_manifest
@@ -16,7 +16,7 @@ class PairedRunError(RuntimeError):
 
 
 _MODEL_PROBE_KEYS = ("id", "type", "question")
-_USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens", "cost_usd")
+_USAGE_KEYS = ("input_tokens", "output_tokens", "cache_read_tokens")
 
 
 def model_probe(probe: Mapping[str, Any]) -> dict[str, str]:
@@ -53,10 +53,6 @@ def _usage(value: Mapping[str, Any], manifest: Mapping[str, Any]) -> dict[str, f
         raise PairedRunError("executor exceeded frozen output_token_budget")
     if usage["cache_read_tokens"] > manifest["cache_read_token_budget"]:
         raise PairedRunError("executor exceeded frozen cache_read_token_budget")
-    expected_cost = usage["input_tokens"] * manifest["input_price_per_token"] + usage["output_tokens"] * manifest["output_price_per_token"] + usage["cache_read_tokens"] * manifest["cache_read_price_per_token"]
-    if not math.isclose(float(usage["cost_usd"]), expected_cost, rel_tol=0.0, abs_tol=1e-12):
-        raise PairedRunError("executor usage.cost_usd does not match frozen prices")
-    usage["cost_usd"] = expected_cost
     return usage
 
 
@@ -80,27 +76,32 @@ def run_paired_evaluation(
     by_id = {str(probe.get("id")): probe for probe in probes}
     if tuple(by_id) != expected or len(by_id) != len(probes):
         raise PairedRunError("probes must match the manifest's complete ordered item_ids")
-    rows = []
-    total_cost = 0.0
-    for task_id in expected:
+    def run_one(index: int, task_id: str, arm: str) -> tuple[int, dict[str, Any]]:
         probe = by_id[task_id]
-        public_probe = model_probe(probe)
-        for arm in ("stock", "scroll"):
-            response = execute(arm, public_probe)
-            if not isinstance(response, Mapping) or not isinstance(response.get("answer"), str):
-                raise PairedRunError("executor must return a string answer")
-            usage = _usage(response, manifest)
-            total_cost += float(usage["cost_usd"])
-            if total_cost > manifest["cost_ceiling_usd"]:
-                raise PairedRunError("paired evaluation exceeded frozen cost_ceiling_usd")
-            verdict = judge(probe, response["answer"])
-            if not isinstance(verdict, Mapping) or not isinstance(verdict.get("score"), (int, float)) or isinstance(verdict.get("score"), bool):
-                raise PairedRunError("judge must return a numeric score")
-            judge_usage = _usage(verdict, manifest)
-            total_cost += float(judge_usage["cost_usd"])
-            if total_cost > manifest["cost_ceiling_usd"]:
-                raise PairedRunError("paired evaluation exceeded frozen cost_ceiling_usd")
-            answer_digest = hashlib.sha256(response["answer"].encode("utf-8", errors="replace")).hexdigest()
-            rows.append({"task_id": task_id, "arm": arm, "score": float(verdict["score"]), "answer_sha256": answer_digest, "usage": usage, "judge_usage": judge_usage})
+        response = execute(arm, model_probe(probe))
+        if not isinstance(response, Mapping) or not isinstance(response.get("answer"), str):
+            raise PairedRunError("executor must return a string answer")
+        verdict = judge(probe, response["answer"])
+        if not isinstance(verdict, Mapping) or not isinstance(verdict.get("score"), (int, float)) or isinstance(verdict.get("score"), bool):
+            raise PairedRunError("judge must return a numeric score")
+        answer_digest = hashlib.sha256(response["answer"].encode("utf-8", errors="replace")).hexdigest()
+        return index, {"task_id": task_id, "arm": arm, "score": float(verdict["score"]), "answer_sha256": answer_digest, "usage": _usage(response, manifest), "judge_usage": _usage(verdict, manifest)}
+
+    jobs = [(index, task_id, arm) for index, (task_id, arm) in enumerate((task_id, arm) for task_id in expected for arm in ("stock", "scroll"))]
+    rows_by_index = {}
+    executor = ThreadPoolExecutor(max_workers=manifest["max_parallel_workers"])
+    futures = []
+    try:
+        futures = [executor.submit(run_one, *job) for job in jobs]
+        for future in as_completed(futures):
+            index, row = future.result()
+            rows_by_index[index] = row
+    except Exception:
+        for future in futures:
+            future.cancel()
+        raise
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
+    rows = [rows_by_index[index] for index, _, _ in jobs]
     manifest_digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    return {"manifest_sha256": manifest_digest, "total_cost_usd": total_cost, "rows": rows}
+    return {"manifest_sha256": manifest_digest, "billing_mode": manifest["billing_mode"], "rows": rows}

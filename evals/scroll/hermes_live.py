@@ -148,15 +148,19 @@ def _history_row(session: int, date: str | None, role: str, content: str) -> dic
     return {"role": role, "content": f"{tag} {role}: {content.strip()}"}
 
 
-def _auxiliary_usage(db: Any, session_id: str) -> tuple[int, int, int]:
+def _auxiliary_usage(db: Any, session_id: str, expected_model: str) -> tuple[int, int, int]:
     try:
         with db._read_ctx() as conn:
-            row = conn.execute(
-                "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0), COALESCE(SUM(cache_read_tokens), 0) "
+            rows = conn.execute(
+                "SELECT COALESCE(input_tokens, 0), COALESCE(output_tokens, 0), COALESCE(cache_read_tokens, 0), model, billing_provider "
                 "FROM session_model_usage WHERE session_id = ? AND task <> ''", (session_id,),
-            ).fetchone()
-        return int(row[0] or 0), int(row[1] or 0), int(row[2] or 0)
+            ).fetchall()
+        if any(row[3] != expected_model or row[4] != "openai-codex" for row in rows):
+            raise LiveRunError("auxiliary evaluation left the ChatGPT Codex OAuth route")
+        return tuple(sum(int(row[index] or 0) for row in rows) for index in range(3))
     except Exception as exc:
+        if isinstance(exc, LiveRunError):
+            raise
         raise LiveRunError("could not account for auxiliary evaluation usage") from exc
 
 
@@ -294,11 +298,36 @@ def verify_memory_inputs(manifest: Mapping[str, Any], longmemeval_path: Path, be
 
 def _build_live_agent(factory: Any, job: Mapping[str, Any], session_id: str, db: Any, toolsets: list[str]) -> Any:
     return factory(
-        provider="openrouter", api_mode="chat_completions", model=job["model"], session_id=session_id, session_db=db,
+        provider="openai-codex", api_mode="codex_responses", model=job["model"], session_id=session_id, session_db=db,
         enabled_toolsets=toolsets, quiet_mode=True, skip_context_files=True, skip_memory=True,
         skip_background_review=True, platform="cli", max_iterations=int(job["max_iterations"]),
-        max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False}, request_overrides={"seed": job["seed"], "service_tier": job["service_tier"]},
+        max_tokens=int(job["max_output_tokens"]), reasoning_config={"enabled": False}, fallback_model=[],
     )
+
+
+def _require_chatgpt_codex_oauth(hermes_home: Path) -> None:
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    from hermes_cli.auth import get_codex_auth_status
+
+    token = set_hermes_home_override(hermes_home)
+    try:
+        logged_in = get_codex_auth_status().get("logged_in")
+    finally:
+        reset_hermes_home_override(token)
+    if not logged_in:
+        raise LiveRunError("ChatGPT Codex OAuth credential is unavailable")
+
+
+def _bind_worker_oauth(runtime_home: Path, credential_home: Path) -> None:
+    credential_store = credential_home / "auth.json"
+    worker_store = runtime_home / "auth.json"
+    if not credential_store.is_file():
+        raise LiveRunError("ChatGPT Codex OAuth credential store is unavailable")
+    if worker_store.exists() or worker_store.is_symlink():
+        if not worker_store.is_symlink() or worker_store.resolve() != credential_store.resolve():
+            raise LiveRunError("worker OAuth credential binding is invalid")
+        return
+    worker_store.symlink_to(credential_store)
 
 
 def _configure_coding_workspace(workspace: Path, session_id: str, register: Any) -> None:
@@ -312,6 +341,8 @@ def _worker_result(job_path: Path) -> None:
     job = _read_json(job_path)
     runtime_home = Path(job["runtime_home"])
     runtime_home.mkdir(parents=True, exist_ok=True)
+    credential_home = Path(job["credential_home"])
+    _bind_worker_oauth(runtime_home, credential_home)
     (runtime_home / "config.yaml").write_text(
         "model:\n"
         f"  context_length: {job['context_window']}\n"
@@ -322,10 +353,9 @@ def _worker_result(job_path: Path) -> None:
         "  threshold: 0.75\n"
         "auxiliary:\n"
         "  compression:\n"
-        "    provider: openrouter\n"
+        "    provider: openai-codex\n"
         f"    model: {job['model']}\n"
-        "    extra_body:\n"
-        f"      service_tier: {job['service_tier']}\n"
+        "    api_mode: codex_responses\n"
         "    reasoning_effort: none\n"
         f"    max_output_tokens: {job['max_output_tokens']}\n",
         encoding="utf-8",
@@ -335,11 +365,7 @@ def _worker_result(job_path: Path) -> None:
     workspace = None
     if coding:
         workspace = Path(str(job.get("workspace") or ""))
-    from hermes_cli.env_loader import load_hermes_dotenv
-
-    load_hermes_dotenv(hermes_home=job["credential_home"], load_external_secrets=False)
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        raise LiveRunError("OpenRouter credential was not loaded")
+    _require_chatgpt_codex_oauth(runtime_home)
     from hermes_state import SessionDB
     from run_agent import AIAgent
 
@@ -365,6 +391,8 @@ def _worker_result(job_path: Path) -> None:
             return _build_live_agent(AIAgent, job, session_id, db, toolsets)
 
         agent = build_agent()
+        if getattr(agent, "provider", None) != "openai-codex" or getattr(agent, "api_mode", None) != "codex_responses" or getattr(agent, "model", None) != job["model"]:
+            raise LiveRunError("evaluation agent left the ChatGPT Codex OAuth route")
         scenario_latency_seconds = 0.0
         if coding:
             scenario_started = time.monotonic()
@@ -384,13 +412,12 @@ def _worker_result(job_path: Path) -> None:
         input_tokens = int(getattr(agent, "session_input_tokens", 0) or 0)
         output_tokens = int(getattr(agent, "session_output_tokens", 0) or 0)
         cache_read_tokens = int(getattr(agent, "session_cache_read_tokens", 0) or 0)
-        auxiliary_input, auxiliary_output, auxiliary_cache_read = _auxiliary_usage(db, session_id)
+        auxiliary_input, auxiliary_output, auxiliary_cache_read = _auxiliary_usage(db, session_id, job["model"])
         input_tokens += auxiliary_input
         output_tokens += auxiliary_output
         cache_read_tokens += auxiliary_cache_read
-        cost = input_tokens * float(job["input_price_per_token"]) + output_tokens * float(job["output_price_per_token"]) + cache_read_tokens * float(job["cache_read_price_per_token"])
         Path(job["result_path"]).write_text(json.dumps({
-            "answer": answer, "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cache_read_tokens": cache_read_tokens, "cost_usd": cost},
+            "answer": answer, "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cache_read_tokens": cache_read_tokens},
             "scenario_latency_seconds": scenario_latency_seconds,
         }), encoding="utf-8")
     finally:
@@ -403,9 +430,9 @@ def _worker_result(job_path: Path) -> None:
 
 
 _JUDGE_PROGRAM = r'''
-import json, os, sys, threading
+import json, sys, threading
 from types import SimpleNamespace
-from openai import OpenAI
+from agent.auxiliary_client import resolve_provider_client
 
 payload = json.load(sys.stdin)
 usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0}
@@ -416,10 +443,12 @@ def usage_value(value, name):
 
 class Judge:
     def __init__(self):
-        self.client = OpenAI(api_key=os.environ["OPENROUTER_API_KEY"], base_url="https://openrouter.ai/api/v1", max_retries=2, timeout=120)
+        self.client, self.model = resolve_provider_client("openai-codex", payload["model"], api_mode="codex_responses")
+        if self.client is None or not self.model:
+            raise RuntimeError("ChatGPT Codex OAuth judge client is unavailable")
     def invoke(self, prompt):
         messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else list(prompt)
-        reply = self.client.chat.completions.create(model=payload["model"], messages=messages, seed=payload["seed"], service_tier=payload["service_tier"], max_tokens=payload["max_output_tokens"])
+        reply = self.client.chat.completions.create(model=self.model, messages=messages, max_tokens=payload["max_output_tokens"])
         if getattr(reply, "usage", None) is None:
             raise RuntimeError("judge response omitted usage")
         with lock:
@@ -447,15 +476,18 @@ print(json.dumps({"score": score, "usage": usage}))
 '''
 
 
-def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], source_python: Path, scroll_source: Path) -> dict[str, Any]:
+def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], source_python: Path, scroll_source: Path, credential_home: Path) -> dict[str, Any]:
     payload = {
         "benchmark": item.benchmark, "question_type": item.question_type, "gold": item.gold, "answer": answer,
-        "model": manifest["judge_model"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"],
+        "model": manifest["judge_model"], "max_output_tokens": manifest["max_output_tokens"],
     }
+    judge_env = os.environ.copy()
+    judge_env["HERMES_HOME"] = str(credential_home)
+    judge_env["PYTHONPATH"] = os.pathsep.join(filter(None, (str(Path(__file__).resolve().parents[2]), judge_env.get("PYTHONPATH"))))
     try:
         process = subprocess.run(
             [str(source_python), "-c", _JUDGE_PROGRAM], input=json.dumps(payload), text=True,
-            cwd=scroll_source, capture_output=True, check=True, timeout=600,
+            cwd=scroll_source, env=judge_env, capture_output=True, check=True, timeout=600,
         )
         result = json.loads(process.stdout)
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
@@ -471,8 +503,7 @@ def _judge_item(item: EvaluationItem, answer: str, manifest: Mapping[str, Any], 
     cache_read_tokens = usage["cache_read_tokens"]
     if input_tokens < 0 or output_tokens <= 0 or cache_read_tokens < 0 or input_tokens + cache_read_tokens <= 0:
         raise LiveRunError(f"pinned {item.benchmark} judge returned invalid usage")
-    cost = input_tokens * float(manifest["input_price_per_token"]) + output_tokens * float(manifest["output_price_per_token"]) + cache_read_tokens * float(manifest["cache_read_price_per_token"])
-    return {"score": float(result["score"]), "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cache_read_tokens": cache_read_tokens, "cost_usd": cost}}
+    return {"score": float(result["score"]), "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens, "cache_read_tokens": cache_read_tokens}}
 
 
 def run_live_evaluation(
@@ -505,11 +536,7 @@ def run_live_evaluation(
         raise LiveRunError("pinned Scroll evaluation environment imports an unexpected scroll_eval") from exc
     if not credential_home.is_dir():
         raise LiveRunError("credential home is unavailable")
-    from hermes_cli.env_loader import load_hermes_dotenv
-
-    load_hermes_dotenv(hermes_home=credential_home, load_external_secrets=False)
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        raise LiveRunError("OpenRouter credential was not loaded")
+    _require_chatgpt_codex_oauth(credential_home)
     verify_memory_inputs(manifest, longmemeval_path, beam_chats_root)
     items = load_manifest_items(manifest, longmemeval_path=longmemeval_path, beam_chats_root=beam_chats_root)
     by_id = {item.identifier: item for item in items}
@@ -527,8 +554,7 @@ def run_live_evaluation(
         job_path = job_root / "job.json"
         job_path.write_text(json.dumps({
             "arm": arm, "model": manifest["agent_model"], "context_window": manifest["context_window_tokens"],
-            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "service_tier": manifest["service_tier"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
-            "input_price_per_token": manifest["input_price_per_token"], "output_price_per_token": manifest["output_price_per_token"], "cache_read_price_per_token": manifest["cache_read_price_per_token"],
+            "max_iterations": manifest["max_iterations"], "temperature": manifest["temperature"], "seed": manifest["seed"], "max_output_tokens": manifest["max_output_tokens"], "output_token_budget": manifest["output_token_budget"], "cache_read_token_budget": manifest["cache_read_token_budget"],
             "history": item.history, "probe": item.public_probe, "runtime_home": str(job_root / "home"),
             "credential_home": str(credential_home), "result_path": str(result_path),
         }), encoding="utf-8")
@@ -545,7 +571,7 @@ def run_live_evaluation(
         item = by_id.get(str(probe.get("id")))
         if item is None:
             raise LiveRunError("judge received an unfrozen probe")
-        return _judge_item(item, answer, manifest, source_python, scroll_source)
+        return _judge_item(item, answer, manifest, source_python, scroll_source, credential_home)
 
     try:
         report = run_paired_evaluation(manifest, [item.public_probe for item in items], execute, judge)
@@ -581,7 +607,7 @@ def main() -> None:
         args.manifest, longmemeval_path=args.longmemeval, beam_chats_root=args.beam_chats,
         scroll_source=args.scroll_source, runtime_root=args.runtime_root, output_path=args.output,
     )
-    print(json.dumps({"manifest_sha256": report["manifest_sha256"], "total_cost_usd": report["total_cost_usd"], "rows": len(report["rows"])}, sort_keys=True))
+    print(json.dumps({"manifest_sha256": report["manifest_sha256"], "billing_mode": report["billing_mode"], "rows": len(report["rows"])}, sort_keys=True))
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ from typing import Any
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _CREDENTIAL_VALUE_RE = re.compile(r"(?:^|\s)(?:basic\s+|bearer\s+|sk-|AIza|gh[pousr]_|xox[baprs]-)", re.IGNORECASE)
-_MANIFEST_KEYS = frozenset({"schema_version", "live_model", "implementation_commit", "plan_sha256", "credential_free_manifest_sha256", "agent_prompt_sha256", "provider", "authentication_mode", "agent_model", "judge_model", "judge_source", "service_tier", "temperature", "seed", "context_window_tokens", "max_iterations", "max_output_tokens", "input_token_budget", "output_token_budget", "cache_read_token_budget", "input_price_per_token", "output_price_per_token", "cache_read_price_per_token", "cost_ceiling_usd", "source_revisions", "licenses", "datasets", "arms"})
+_MANIFEST_KEYS = frozenset({"schema_version", "live_model", "implementation_commit", "plan_sha256", "credential_free_manifest_sha256", "agent_prompt_sha256", "provider", "authentication_mode", "billing_mode", "agent_model", "judge_model", "judge_source", "temperature", "seed", "context_window_tokens", "max_iterations", "max_output_tokens", "max_parallel_workers", "input_token_budget", "output_token_budget", "cache_read_token_budget", "source_revisions", "licenses", "datasets", "arms"})
 _DATASET_KEYS = frozenset({"name", "revision", "item_ids"})
 
 
@@ -26,7 +26,7 @@ def _require(value: Any, name: str, expected_type: type | tuple[type, ...]) -> A
 def _contains_credential(value: Any) -> bool:
     if isinstance(value, dict):
         return any(
-            (isinstance(key, str) and key.lower() not in {"input_price_per_token", "output_price_per_token", "cache_read_price_per_token"} and (key.lower().endswith(("token", "secret", "password", "api_key", "credential")) or key.lower() in {"authorization", "refresh"}))
+            (isinstance(key, str) and (key.lower().endswith(("token", "secret", "password", "api_key", "credential")) or key.lower() in {"authorization", "refresh"}))
             or _contains_credential(item)
             for key, item in value.items()
         )
@@ -50,17 +50,21 @@ def validate_live_manifest(manifest: dict[str, Any]) -> None:
     for key in ("plan_sha256", "credential_free_manifest_sha256", "agent_prompt_sha256"):
         if not _SHA256_RE.fullmatch(str(manifest.get(key, ""))):
             raise LiveManifestError(f"{key} must be a SHA-256")
-    for key in ("provider", "authentication_mode", "agent_model", "judge_model", "judge_source", "service_tier"):
+    for key in ("provider", "authentication_mode", "billing_mode", "agent_model", "judge_model", "judge_source"):
         _require(manifest.get(key), key, str)
-    if manifest["service_tier"] not in {"auto", "default", "flex", "priority", "scale"}:
-        raise LiveManifestError("service_tier must be an OpenRouter service tier")
-    for key in ("seed", "context_window_tokens", "max_iterations", "max_output_tokens", "input_token_budget", "output_token_budget", "cache_read_token_budget", "input_price_per_token", "output_price_per_token", "cache_read_price_per_token", "cost_ceiling_usd"):
+    if manifest["provider"] != "openai-codex" or manifest["authentication_mode"] != "chatgpt-codex-oauth" or manifest["billing_mode"] != "chatgpt_subscription":
+        raise LiveManifestError("live evaluation must use ChatGPT Codex OAuth subscription billing")
+    if not manifest["agent_model"].startswith("gpt-") or (manifest["judge_model"] != "none-objective-verifier" and not manifest["judge_model"].startswith("gpt-")):
+        raise LiveManifestError("live evaluation must use OpenAI Codex models")
+    for key in ("seed", "context_window_tokens", "max_iterations", "max_output_tokens", "max_parallel_workers", "input_token_budget", "output_token_budget", "cache_read_token_budget"):
         _require(manifest.get(key), key, (int, float))
+    if not isinstance(manifest["max_parallel_workers"], int) or isinstance(manifest["max_parallel_workers"], bool):
+        raise LiveManifestError("max_parallel_workers must be an integer")
     temperature = manifest.get("temperature")
     if temperature is not None and (not isinstance(temperature, (int, float)) or isinstance(temperature, bool) or temperature < 0):
         raise LiveManifestError("temperature must be non-negative or null when the model does not support it")
-    if manifest["context_window_tokens"] <= 0 or manifest["max_iterations"] <= 0 or manifest["max_output_tokens"] <= 0 or manifest["input_token_budget"] <= 0 or manifest["output_token_budget"] <= 0 or manifest["cache_read_token_budget"] <= 0 or manifest["input_price_per_token"] < 0 or manifest["output_price_per_token"] < 0 or manifest["cache_read_price_per_token"] < 0 or manifest["cost_ceiling_usd"] <= 0:
-        raise LiveManifestError("budgets, prices, and cost ceiling must be non-negative with positive token budgets and ceiling")
+    if manifest["context_window_tokens"] <= 0 or manifest["max_iterations"] <= 0 or manifest["max_output_tokens"] <= 0 or manifest["max_parallel_workers"] <= 0 or manifest["max_parallel_workers"] > 4 or manifest["input_token_budget"] <= 0 or manifest["output_token_budget"] <= 0 or manifest["cache_read_token_budget"] <= 0:
+        raise LiveManifestError("token budgets must be positive and max_parallel_workers must be between 1 and 4")
     for key in ("source_revisions", "licenses"):
         value = _require(manifest.get(key), key, dict)
         if not all(isinstance(name, str) and name and isinstance(revision, str) and revision for name, revision in value.items()):

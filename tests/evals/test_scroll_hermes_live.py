@@ -4,10 +4,11 @@ import json
 import os
 import subprocess
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 
-from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
+from evals.scroll.hermes_live import EvaluationItem, LiveRunError, _auxiliary_usage, _bind_worker_oauth, _build_live_agent, _configure_coding_workspace, _enabled_toolsets, _judge_item, _prepare_coding_scenario, _require_clean_git_checkout, agent_prompt_sha256, load_beam_items, load_longmemeval_items
 
 
 def test_longmemeval_loader_exposes_only_public_probe(tmp_path):
@@ -66,35 +67,62 @@ def test_live_worker_counts_auxiliary_compression_usage():
         def execute(self, _query, _params):
             return self
 
-        def fetchone(self):
-            return (12, 3, 4)
+        def fetchall(self):
+            return [(12, 3, 4, "gpt-5.6-luna", "openai-codex")]
 
     class Database:
         @contextmanager
         def _read_ctx(self):
             yield Connection()
 
-    assert _auxiliary_usage(Database(), "session") == (12, 3, 4)
+    assert _auxiliary_usage(Database(), "session", "gpt-5.6-luna") == (12, 3, 4)
     with pytest.raises(LiveRunError, match="auxiliary"):
-        _auxiliary_usage(object(), "session")
+        _auxiliary_usage(object(), "session", "gpt-5.6-luna")
 
 
-def test_live_agent_uses_openrouter_chat_completions_for_seeded_runs():
-    captured = _build_live_agent(lambda **kwargs: kwargs, {"model": "openai/gpt-5.6-luna", "max_iterations": 8, "max_output_tokens": 4096, "seed": 20260904, "service_tier": "flex"}, "session", object(), ["coding"])
+def test_live_agent_uses_chatgpt_codex_responses_without_fallback():
+    captured = _build_live_agent(lambda **kwargs: kwargs, {"model": "gpt-5.6-luna", "max_iterations": 8, "max_output_tokens": 4096}, "session", object(), ["coding"])
 
-    assert captured["provider"] == "openrouter"
-    assert captured["api_mode"] == "chat_completions"
-    assert captured["request_overrides"] == {"seed": 20260904, "service_tier": "flex"}
+    assert captured["provider"] == "openai-codex"
+    assert captured["api_mode"] == "codex_responses"
+    assert captured["fallback_model"] == []
+    assert "request_overrides" not in captured
+
+
+def test_worker_oauth_binding_uses_a_symlink_without_copying_credentials(tmp_path):
+    credential_home = tmp_path / "credentials"
+    runtime_home = tmp_path / "runtime"
+    credential_home.mkdir()
+    runtime_home.mkdir()
+    (credential_home / "auth.json").write_text("credential", encoding="utf-8")
+
+    _bind_worker_oauth(runtime_home, credential_home)
+
+    worker_store = runtime_home / "auth.json"
+    assert worker_store.is_symlink()
+    assert worker_store.resolve() == (credential_home / "auth.json").resolve()
+    (runtime_home / "auth.json").unlink()
+    (runtime_home / "auth.json").write_text("different", encoding="utf-8")
+    with pytest.raises(LiveRunError, match="binding"):
+        _bind_worker_oauth(runtime_home, credential_home)
 
 
 @pytest.mark.parametrize("usage", [{}, {"input_tokens": 1, "output_tokens": 1}, {"input_tokens": 0, "output_tokens": 1, "cache_read_tokens": 0}, {"input_tokens": 1, "output_tokens": 0, "cache_read_tokens": 0}])
 def test_memory_judge_rejects_incomplete_or_nonpositive_usage(monkeypatch, tmp_path, usage):
     item = EvaluationItem("longmemeval/case-1", "longmemeval", "single-session-user", "Which?", (), {"answer": "private"})
-    monkeypatch.setattr("evals.scroll.hermes_live.subprocess.run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=json.dumps({"score": 1, "usage": usage})))
-    manifest = {"judge_model": "openai/gpt-5.6-luna", "seed": 1, "service_tier": "flex", "max_output_tokens": 32, "input_price_per_token": 0.1, "output_price_per_token": 0.2, "cache_read_price_per_token": 0.01}
+    captured = {}
+
+    def run(*args, **kwargs):
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(args, 0, stdout=json.dumps({"score": 1, "usage": usage}))
+
+    monkeypatch.setattr("evals.scroll.hermes_live.subprocess.run", run)
+    manifest = {"judge_model": "gpt-5.6-luna", "max_output_tokens": 32}
 
     with pytest.raises(LiveRunError, match="usage"):
-        _judge_item(item, "answer", manifest, tmp_path / "python", tmp_path)
+        _judge_item(item, "answer", manifest, tmp_path / "python", tmp_path, tmp_path / "credentials")
+    assert captured["env"]["HERMES_HOME"] == str(tmp_path / "credentials")
+    assert str(Path.cwd()) in captured["env"]["PYTHONPATH"]
 
 
 def test_coding_workspace_is_registered_for_the_worker_task(tmp_path, monkeypatch):
