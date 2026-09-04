@@ -46,7 +46,7 @@ progress yet reached the host's 600-second total ceiling. Candidate
 host ceiling for both arms and binds schema v2 to coding before provenance or
 OAuth. The first schema-v3 resume candidate did not bind its reused artifacts
 to the declared r4 source and received P1/NO-GO. Candidate
-`47b59285c1536dd0c56c4c359a41937b8b732581` pins a checked-in attestation of
+`a3aa933901da6b57f5763c448235e518e0561985` pins a checked-in attestation of
 each reusable r4 result and workspace and awaits focused review.
 
 This amendment supersedes the prior OpenRouter Flex candidate after the task
@@ -60,13 +60,13 @@ total could not be reconciled with the provider dashboard and is excluded.
 | Item | Value |
 | --- | --- |
 | Memory implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
-| Coding implementation commit | `47b59285c1536dd0c56c4c359a41937b8b732581` |
+| Coding implementation commit | `a3aa933901da6b57f5763c448235e518e0561985` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
 | Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
 | Memory report SHA-256 | `5463a530fa1b7cdaf1d971d839cfcf588dfe513e1925bc6d9a5875caec949dd1` |
-| Coding report manifest digest (canonical JSON SHA-256) | `71402b7cf959c2a3e3aacbcb23df0f8405f44b88f22f39215f16320e0400db8d` |
+| Coding report manifest digest (canonical JSON SHA-256) | `6f9bc2fca6984f3345d89e914c43d797764fa8ff5db8a4c236989fc8d5a297b7` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
@@ -196,6 +196,10 @@ The focused reviewer rejected the prior schema-v3 implementation as P1/NO-GO
 because the bare result path could be accepted without provenance binding. The
 attested replacement accepts no unlisted job: a listed job fails closed on any
 result or workspace change, while every unlisted/incomplete r4 job runs fresh.
+The reviewer then found that the objective verifier could write Python or
+pytest cache files after the workspace hash check. Candidate
+`a3aa933901da6b57f5763c448235e518e0561985` disables both writes and regresses
+that the full workspace tree remains unchanged during verification.
 
 ## Ceiling-schema gate
 
@@ -226,7 +230,7 @@ are not evidence.
 ## Verification and independent disposition
 
 - `pytest -q tests/evals/test_scroll_hermes_live.py tests/evals/test_scroll_coding_trajectories.py tests/evals/test_scroll_paired_runner.py tests/evals/test_scroll_live_manifest.py tests/plugins/test_scroll_documentation.py tests/agent/test_auxiliary_client.py::TestBuildCodexClient tests/agent/test_codex_cloudflare_headers.py`
-  — 57 passed for the attested-resume change and broader focused gate.
+  — 58 passed after the non-mutating-verifier correction.
 - `ruff check agent/auxiliary_client.py evals/scroll/hermes_live.py
   evals/scroll/coding_live.py tests/evals/test_scroll_hermes_live.py
   tests/agent/test_auxiliary_client.py tests/agent/test_codex_cloudflare_headers.py`

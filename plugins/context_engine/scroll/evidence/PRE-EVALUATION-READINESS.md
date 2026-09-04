@@ -10,7 +10,7 @@ normal liveness hooks, and preserves timer-owned cancellation cleanup. Its r3
 live run instead showed substantive stream progress but exceeded the shared
 600-second host ceiling. Its r4 successor retained 28 completed results but
 showed the same healthy stream outliving the 900-second envelope. Candidate
-`47b59285c1536dd0c56c4c359a41937b8b732581` freezes aligned 1,500-second host,
+`a3aa933901da6b57f5763c448235e518e0561985` freezes aligned 1,500-second host,
 1,600-second adapter, 1,650-second worker, and 30-minute lease bounds. Its
 checked-in attestation locks the task owner's narrow r4 reuse authorization to
 the exact completed result and workspace bytes; incomplete jobs stay fresh. It
