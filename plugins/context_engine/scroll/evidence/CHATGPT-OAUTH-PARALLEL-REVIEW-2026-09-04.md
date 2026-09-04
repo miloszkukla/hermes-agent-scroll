@@ -2,12 +2,19 @@
 
 ## Status
 
-**GO — final focused review completed.** Reviewer `/root/final_fresh_review`
-approved implementation commit `9a53ca9a21ba65f6b5c86089ccedf04a994f7315`
-and evidence pin `27666ea2ea3c2298e11a98e9e42cb81cb7118bb6`. The pool lease
-fails closed unless its JWT has a finite numeric expiry strictly beyond 21
-minutes; direct provenance, focused tests, Ruff, and diff checks passed. The
-prior review approved implementation commit
+**Focused review pending.** The interrupted memory lane has no complete report:
+a successful retry lost its auxiliary billing-route label, and the prior
+evaluator stopped after 79 of 96 arms. The task owner directed that missing
+accounting metadata must not invalidate an otherwise valid run. Candidate
+`8c32e5e22252c54a39cd1df415d0cbe04bb67774` preserves retry route accounting,
+accepts only blank (not conflicting) auxiliary provider labels, and adds
+explicit resumption from complete saved worker results. It requires fresh
+focused review before the lane resumes. The prior review approved implementation
+commit `9a53ca9a21ba65f6b5c86089ccedf04a994f7315` and evidence pin
+`27666ea2ea3c2298e11a98e9e42cb81cb7118bb6`. The pool lease fails closed
+unless its JWT has a finite numeric expiry strictly beyond 21 minutes; direct
+provenance, focused tests, Ruff, and diff checks passed. The earlier review
+approved implementation commit
 `490e6417886933550f3bb45e00cf29b5fcbffb31` after verifying parent-only OAuth
 leasing, matched-route auxiliary inheritance, the four-worker cap/order,
 protected lease files, Bubblewrap containment and DNS. Preflight then
@@ -27,12 +34,12 @@ total could not be reconciled with the provider dashboard and is excluded.
 
 | Item | Value |
 | --- | --- |
-| Implementation commit | `9a53ca9a21ba65f6b5c86089ccedf04a994f7315` |
+| Implementation commit | `8c32e5e22252c54a39cd1df415d0cbe04bb67774` |
 | Provider / auth / billing | `openai-codex` / `chatgpt-codex-oauth` / `chatgpt_subscription` |
 | Agent and memory judge model | `gpt-5.6-luna` |
 | Maximum isolated workers | `4` |
-| Memory manifest SHA-256 | `2f0da736837368ee9c345bdd0dc427a58f9f60460cc3dc736b0c61426e6be739` |
-| Coding manifest SHA-256 | `771c79bbe071562e2c333ff9bd2e3b0d8c5decacbca7faf92a087d6634118324` |
+| Memory manifest SHA-256 | `d7447d09200754d19156511dddab9d58e155f5dffb4c97c9d82d597236b42600` |
+| Coding manifest SHA-256 | `63ce6355d62873e4877b11b4a913331a8928091a7dedaad8b6c569949c90df0a` |
 
 The frozen `seed` remains solely for deterministic task ordering and bootstrap
 statistics. It is not sent to the Codex Responses transport.
