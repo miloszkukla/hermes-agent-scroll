@@ -2,7 +2,7 @@
 
 ## Status
 
-**PAUSED pending focused review of a replacement coding lane.** The controlled memory
+**GO for a fresh replacement coding lane.** The controlled memory
 lane resumed from its known 79-result checkpoint after a transient retry lost
 only an auxiliary billing-route label. The task owner directed that missing
 accounting metadata must not invalidate an otherwise valid run. It completed
@@ -206,5 +206,20 @@ because the daemon dropped normal liveness hooks. Candidate
 `4de8745a081620b09cc854fa932a817465511a01` restores them and awaits a fresh
 focused disposition. That review returned P1/NO-GO because protected
 cancellation closed an orphaned stream before its timer-scoped cleanup; candidate
-`2556eb457db6a682dc1e8ceb25f06bf409532e78` restores that contract and awaits a
-fresh focused disposition.
+`2556eb457db6a682dc1e8ceb25f06bf409532e78` restores that contract.
+
+## Final consumption gate
+
+Independent reviewer: `/root/final_fresh_review`.
+
+On 2026-09-04, the reviewer checked implementation commit
+`2556eb457db6a682dc1e8ceb25f06bf409532e78` and evidence/manifest commit
+`fb4deabbef40f796708945c34e8412e9a68adffa`. The reviewer recomputed the coding
+manifest digest `67228f5a0c6aacc6eb65c909880f1b3803e0121976a02f2b2b6c8999775fe82e`,
+validated its schema and provenance, and verified the blocked-iterator deadline,
+normal liveness/timing hook propagation, protected cancellation cleanup, and
+unchanged four-worker OAuth/Bubblewrap boundary. The focused cancellation,
+stall, and hook command passed 20 tests; the owner focused suite passed 305
+tests, with Ruff and `git diff --check` clean. Disposition: **GO — no actionable
+P0/P1/P2.** This authorizes only a new coding runtime; the 46-result and
+27-result failed runtimes remain excluded.
