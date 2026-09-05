@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "experiment": "scroll-oracle-retrieval",
+  "implementation_commit": "5d8cd7a0ff7c3a39b824a7eea646dc57ba00f2a5",
+  "base_memory_manifest_sha256": "e09e421dc17858b713d6f9b5102118e5c64f4fa33726046b5e87743abfbd8d8f",
+  "base_memory_report_sha256": "14dd0adeec4612a7cd89533a2986a9416de3580ff114b42a31e4405b93b67f33",
+  "policy_report_sha256": "e4c6203e9ab9620d7e1446f1e7af0f5e93bf1711a4c08fbf6648b29c6b6c27b1",
+  "controller_report_sha256": "748b72a166229dccc37664a1e24fb122916323a777e65b5eb5ad858488fc74df",
+  "controller_prompt_sha256": "2f24a21dccc2d2a00f0d4c80a7933f3646b8358176736b9ab57ca93668fb0c95",
+  "oracle_query_algorithm": "gold_answer_terms_question_backfill_v1",
+  "controller_retrieval_algorithm": "search_snippets_v1",
+  "agent_model": "gpt-5.6-luna",
+  "judge_model": "gpt-5.6-luna",
+  "source_revisions": {
+    "hermes_base": "29112bef099274229cadff79cdff7bf7b99c4b77",
+    "scroll": "313077708ea105cc79bf0a997338e14dae916f8c",
+    "longmemeval": "9e0b455f4ef0e2ab8f2e582289761153549043fc",
+    "beam": "3e12035532eb85768f1a7cd779832b650c4b2ef9"
+  },
+  "max_parallel_workers": 4,
+  "worker_timeout_seconds": 900,
+  "selected_item_ids": [
+    "longmemeval/01493427",
+    "longmemeval/00ca467f",
+    "longmemeval/0e5e2d1a",
+    "longmemeval/06878be2",
+    "longmemeval/001be529",
+    "longmemeval/08f4fc43",
+    "beam/100K/1/abstention-0",
+    "beam/100K/2/contradiction_resolution-0",
+    "beam/100K/4/information_extraction-0",
+    "beam/100K/10/temporal_reasoning-0"
+  ]
+}
