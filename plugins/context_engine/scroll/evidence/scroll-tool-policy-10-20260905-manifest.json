@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "experiment": "scroll-tool-policy",
+  "implementation_commit": "5d8cd7a0ff7c3a39b824a7eea646dc57ba00f2a5",
+  "base_memory_manifest_sha256": "e09e421dc17858b713d6f9b5102118e5c64f4fa33726046b5e87743abfbd8d8f",
+  "base_memory_report_sha256": "14dd0adeec4612a7cd89533a2986a9416de3580ff114b42a31e4405b93b67f33",
+  "policy_prompt_sha256": "ba85a7281e0bf75630c9447baf47b822c58107f0bb343c223760a77b8d1da16c",
+  "agent_model": "gpt-5.6-luna",
+  "judge_model": "gpt-5.6-luna",
+  "source_revisions": {
+    "scroll": "313077708ea105cc79bf0a997338e14dae916f8c",
+    "longmemeval": "9e0b455f4ef0e2ab8f2e582289761153549043fc",
+    "beam": "3e12035532eb85768f1a7cd779832b650c4b2ef9"
+  },
+  "max_parallel_workers": 4,
+  "worker_timeout_seconds": 900,
+  "selected_item_ids": [
+    "longmemeval/01493427",
+    "longmemeval/00ca467f",
+    "longmemeval/0e5e2d1a",
+    "longmemeval/06878be2",
+    "longmemeval/001be529",
+    "longmemeval/08f4fc43",
+    "beam/100K/1/abstention-0",
+    "beam/100K/2/contradiction_resolution-0",
+    "beam/100K/4/information_extraction-0",
+    "beam/100K/10/temporal_reasoning-0"
+  ]
+}
