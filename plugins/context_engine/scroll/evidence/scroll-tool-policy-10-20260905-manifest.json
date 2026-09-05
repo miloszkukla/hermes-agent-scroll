@@ -8,6 +8,7 @@
   "agent_model": "gpt-5.6-luna",
   "judge_model": "gpt-5.6-luna",
   "source_revisions": {
+    "hermes_base": "29112bef099274229cadff79cdff7bf7b99c4b77",
     "scroll": "313077708ea105cc79bf0a997338e14dae916f8c",
     "longmemeval": "9e0b455f4ef0e2ab8f2e582289761153549043fc",
     "beam": "3e12035532eb85768f1a7cd779832b650c4b2ef9"
