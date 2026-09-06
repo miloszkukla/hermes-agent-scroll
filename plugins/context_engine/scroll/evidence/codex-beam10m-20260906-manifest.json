@@ -1,0 +1,35 @@
+{
+  "agent_model": "gpt-5.6-luna",
+  "api_mode": "codex_responses",
+  "authentication_mode": "chatgpt-oauth",
+  "beam_adapter_sha256": "16f5c18b5ac09181fa6aff11862526c7f59ddc6299bf850fdaec2acd22b7026a",
+  "billing_mode": "chatgpt-subscription",
+  "context_window_tokens": 900000,
+  "conversation_sha256": {
+    "8": "8215aa6c9b0c6983ed839ef216db6af7c4798faa3bf484d55d02446119cb97cf",
+    "9": "152c21bc90289aa441192d5a7914a3417d41264792eb072ac3362f7ebb68c064",
+    "10": "fca3a0f5b368fea2fb51698e57a8433d427c00e78001641f36463802689bfda0"
+  },
+  "conversations": ["8", "9", "10"],
+  "experiment": "codex-beam10m-raw-clearing",
+  "implementation_commit": "d3db65826e88271605bda71e2e0dcdde63e3669a",
+  "judge_model": "gpt-5.6-luna",
+  "max_iterations": 12,
+  "max_output_tokens": 4096,
+  "max_parallel_workers": 2,
+  "pilot_item_ids": ["beam/10M/8/abstention-0"],
+  "provider": "openai-codex",
+  "reasoning_config": {
+    "effort": "high",
+    "enabled": true
+  },
+  "runner_sha256": "18e7dd5438caf4c8dbe8b501563744298a20a7ea4802caa626c05f671d231eac",
+  "schema_version": 1,
+  "seed_timeout_seconds": 7200,
+  "source_revisions": {
+    "beam": "3e12035532eb85768f1a7cd779832b650c4b2ef9",
+    "hermes": "d3db65826e88271605bda71e2e0dcdde63e3669a",
+    "scroll": "313077708ea105cc79bf0a997338e14dae916f8c"
+  },
+  "worker_timeout_seconds": 1800
+}

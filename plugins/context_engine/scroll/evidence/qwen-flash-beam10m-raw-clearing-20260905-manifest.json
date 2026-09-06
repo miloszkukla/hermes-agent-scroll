@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "experiment": "qwen-flash-beam10m-raw-clearing",
+  "implementation_commit": "d3db65826e88271605bda71e2e0dcdde63e3669a",
+  "runner_sha256": "138e00c806970718ad2317ca2b6bdb37b546a4e5c116d80466c4395f25bf08d6",
+  "beam_adapter_sha256": "16f5c18b5ac09181fa6aff11862526c7f59ddc6299bf850fdaec2acd22b7026a",
+  "qwen_runner_sha256": "2c85aa2a2475c530086224e91584379154cac1c293542d8e7ecae9aa7ff365b3",
+  "provider": "openrouter",
+  "authentication_mode": "openrouter-api-key",
+  "billing_mode": "openrouter-payg",
+  "api_mode": "chat_completions",
+  "agent_model": "qwen/qwen3.8-flash",
+  "judge_model": "qwen/qwen3.6-flash",
+  "requested_service_tier": "flex",
+  "reasoning_config": {
+    "enabled": true,
+    "effort": "high"
+  },
+  "temperature": 0,
+  "seed": 20260905,
+  "context_window_tokens": 1000000,
+  "max_iterations": 16,
+  "max_output_tokens": 8192,
+  "max_parallel_workers": 8,
+  "worker_timeout_seconds": 1800,
+  "seed_timeout_seconds": 7200,
+  "conversations": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+  ],
+  "conversation_sha256": {
+    "1": "ca0522339039446210bdfc1dbef98246598263653fbe7cdcdc01904ada835783",
+    "2": "8e0cd6cb93267853b124143c43ec83a4ef180c63c4b353ce3b14d13c83df813f",
+    "3": "fb70db91d8ddbf0db80f5e79768092db93358723442c21a45d059b72a18f7258",
+    "4": "11dbe4efc77391094491d782cd10c9afee29b1a9f933c21beb4d8ec48bd112dd",
+    "5": "226e01e1f4ec85bf40cfc16709541a0f9b829cf12e242b28b4065f8e63a7d2cd",
+    "6": "80e50741ad3a0c17d1e6b40d4a98f0efb4cfff75ca55c2915457b7895904de7a",
+    "7": "3de91e32c65c68e7abc5c62a37b0786b8c74d05561777db61e5e0eeb54aec446",
+    "8": "8215aa6c9b0c6983ed839ef216db6af7c4798faa3bf484d55d02446119cb97cf",
+    "9": "152c21bc90289aa441192d5a7914a3417d41264792eb072ac3362f7ebb68c064",
+    "10": "fca3a0f5b368fea2fb51698e57a8433d427c00e78001641f36463802689bfda0"
+  },
+  "pilot_item_ids": [
+    "beam/10M/1/abstention-0",
+    "beam/10M/2/contradiction_resolution-0",
+    "beam/10M/3/event_ordering-0",
+    "beam/10M/4/information_extraction-0",
+    "beam/10M/5/instruction_following-0",
+    "beam/10M/6/knowledge_update-0",
+    "beam/10M/7/multi_session_reasoning-0",
+    "beam/10M/8/preference_following-0",
+    "beam/10M/9/summarization-0",
+    "beam/10M/10/temporal_reasoning-0"
+  ],
+  "source_revisions": {
+    "hermes": "d3db65826e88271605bda71e2e0dcdde63e3669a",
+    "scroll": "313077708ea105cc79bf0a997338e14dae916f8c",
+    "beam": "3e12035532eb85768f1a7cd779832b650c4b2ef9"
+  }
+}

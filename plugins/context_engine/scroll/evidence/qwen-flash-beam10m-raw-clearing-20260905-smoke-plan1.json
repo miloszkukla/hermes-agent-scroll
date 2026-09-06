@@ -1,0 +1,170 @@
+{
+  "agent_model": "qwen/qwen3.8-flash",
+  "arms": [
+    "A",
+    "B",
+    "C",
+    "A'"
+  ],
+  "baseline_seeds": {
+    "1": {
+      "raw_rows": 1832,
+      "raw_tail_rows": 67,
+      "retained_rows": 68,
+      "summary_rows": 1
+    }
+  },
+  "experiment": "qwen-flash-beam10m-raw-clearing",
+  "experiment_manifest_sha256": "43dee013a55e6eb0db99c701a3fed55ec99b499659cc378a649c094252320019",
+  "implementation_commit": "d3db65826e88271605bda71e2e0dcdde63e3669a",
+  "judge_model": "qwen/qwen3.6-flash",
+  "max_probes": 1,
+  "pilot": true,
+  "plan_limit": 1,
+  "provider": "openrouter",
+  "rows": [
+    {
+      "answer_sha256": "f08ba879cf151ff591cf741a103bbd1befac702cc967b9ba60009c9807969a13",
+      "judge_usage": {
+        "cache_read_tokens": 0,
+        "input_tokens": 1074,
+        "output_tokens": 1169
+      },
+      "provenance": {
+        "arm": "A",
+        "execution_plan_limit": "1",
+        "experiment_manifest_sha256": "43dee013a55e6eb0db99c701a3fed55ec99b499659cc378a649c094252320019",
+        "history_sha256": "ca0522339039446210bdfc1dbef98246598263653fbe7cdcdc01904ada835783",
+        "identifier": "beam/10M/1/abstention-0",
+        "implementation_commit": "d3db65826e88271605bda71e2e0dcdde63e3669a",
+        "model": "qwen/qwen3.8-flash",
+        "probe_sha256": "c7b88249035769863d0628a2dedb7983d88b98c8e35d35ba6712becf8c8f962e",
+        "seed_sha256": "1fce65c94eb7d06b6403e16095509f715d8f8b2504092f4fbb6862e6da8da120"
+      },
+      "score": 1.0,
+      "scroll_repl_calls": 0,
+      "seed_metadata": {
+        "raw_rows": 1832,
+        "raw_tail_rows": 67,
+        "retained_rows": 68,
+        "summary_rows": 1
+      },
+      "task_id": "beam/10M/1/abstention-0",
+      "usage": {
+        "cache_read_tokens": 0,
+        "input_tokens": 55134,
+        "output_tokens": 380
+      }
+    },
+    {
+      "answer_sha256": "57068f05b39a8b7f6da210e41ad7211c711a5977898136cdbccbb5d51a1c39a9",
+      "judge_usage": {
+        "cache_read_tokens": 0,
+        "input_tokens": 1146,
+        "output_tokens": 1241
+      },
+      "provenance": {
+        "arm": "B",
+        "execution_plan_limit": "1",
+        "experiment_manifest_sha256": "43dee013a55e6eb0db99c701a3fed55ec99b499659cc378a649c094252320019",
+        "history_sha256": "ca0522339039446210bdfc1dbef98246598263653fbe7cdcdc01904ada835783",
+        "identifier": "beam/10M/1/abstention-0",
+        "implementation_commit": "d3db65826e88271605bda71e2e0dcdde63e3669a",
+        "model": "qwen/qwen3.8-flash",
+        "probe_sha256": "c7b88249035769863d0628a2dedb7983d88b98c8e35d35ba6712becf8c8f962e"
+      },
+      "score": 1.0,
+      "scroll_repl_calls": 16,
+      "seed_metadata": null,
+      "task_id": "beam/10M/1/abstention-0",
+      "usage": {
+        "cache_read_tokens": 75008,
+        "input_tokens": 7808,
+        "output_tokens": 2174
+      }
+    },
+    {
+      "answer_sha256": "15947d0cedb028d862257cba7281ffae275b4e793c21efb406203620b29afefd",
+      "judge_usage": {
+        "cache_read_tokens": 0,
+        "input_tokens": 1164,
+        "output_tokens": 1007
+      },
+      "provenance": {
+        "arm": "C",
+        "execution_plan_limit": "1",
+        "experiment_manifest_sha256": "43dee013a55e6eb0db99c701a3fed55ec99b499659cc378a649c094252320019",
+        "history_sha256": "ca0522339039446210bdfc1dbef98246598263653fbe7cdcdc01904ada835783",
+        "identifier": "beam/10M/1/abstention-0",
+        "implementation_commit": "d3db65826e88271605bda71e2e0dcdde63e3669a",
+        "model": "qwen/qwen3.8-flash",
+        "probe_sha256": "c7b88249035769863d0628a2dedb7983d88b98c8e35d35ba6712becf8c8f962e"
+      },
+      "score": 1.0,
+      "scroll_repl_calls": 16,
+      "seed_metadata": null,
+      "task_id": "beam/10M/1/abstention-0",
+      "usage": {
+        "cache_read_tokens": 54528,
+        "input_tokens": 7634,
+        "output_tokens": 1744
+      }
+    },
+    {
+      "answer_sha256": "86b520e001f91833a4abbc3e0637d6e3460c7926381a56ed988bfd3f0fa9e0e6",
+      "judge_usage": {
+        "cache_read_tokens": 0,
+        "input_tokens": 1061,
+        "output_tokens": 1213
+      },
+      "provenance": {
+        "arm": "A'",
+        "execution_plan_limit": "1",
+        "experiment_manifest_sha256": "43dee013a55e6eb0db99c701a3fed55ec99b499659cc378a649c094252320019",
+        "history_sha256": "ca0522339039446210bdfc1dbef98246598263653fbe7cdcdc01904ada835783",
+        "identifier": "beam/10M/1/abstention-0",
+        "implementation_commit": "d3db65826e88271605bda71e2e0dcdde63e3669a",
+        "model": "qwen/qwen3.8-flash",
+        "probe_sha256": "c7b88249035769863d0628a2dedb7983d88b98c8e35d35ba6712becf8c8f962e"
+      },
+      "score": 1.0,
+      "scroll_repl_calls": 0,
+      "seed_metadata": null,
+      "task_id": "beam/10M/1/abstention-0",
+      "usage": {
+        "cache_read_tokens": 40192,
+        "input_tokens": 57214,
+        "output_tokens": 21217
+      }
+    }
+  ],
+  "schema_version": 1,
+  "score_totals": {
+    "A": 1.0,
+    "A'": 1.0,
+    "B": 1.0,
+    "C": 1.0
+  },
+  "tool_adoption": {
+    "A": {
+      "items": 1,
+      "items_with_scroll_repl": 0,
+      "scroll_repl_calls": 0
+    },
+    "A'": {
+      "items": 1,
+      "items_with_scroll_repl": 0,
+      "scroll_repl_calls": 0
+    },
+    "B": {
+      "items": 1,
+      "items_with_scroll_repl": 1,
+      "scroll_repl_calls": 16
+    },
+    "C": {
+      "items": 1,
+      "items_with_scroll_repl": 1,
+      "scroll_repl_calls": 16
+    }
+  }
+}
