@@ -1,6 +1,6 @@
 """Hermes adaptation of the pinned Scroll BEAM ingest behavior."""
 
-from evals.scroll.beam import clean_content, iter_turns, snapshot_from_chat, to_iso_date
+from evals.scroll.beam import clean_content, iter_sessions, iter_turns, snapshot_from_chat, to_iso_date
 from plugins.context_engine.scroll.sandbox import ScrollCallbacks
 
 
@@ -25,3 +25,20 @@ def test_beam_batch_date_propagates_to_every_snapshot_turn():
 
     assert hits[0]['content'].startswith('[Session 7 | 2024-08-17]')
     assert snapshot.rows[1].correlation[-1] == ('date', '2024-08-17')
+
+
+def test_beam_10m_plans_remain_distinct_sessions():
+    chat = [{"plan-1": [{
+        "batch_number": 1, "time_anchor": "January-01-2025",
+        "turns": [[{"id": "one", "role": "user", "content": "first"}]],
+    }]}, {"plan-2": [{
+        "batch_number": 1, "time_anchor": "January-02-2025",
+        "turns": [[{"id": "two", "role": "assistant", "content": "second"}]],
+    }]}]
+
+    assert [session for session, _ in iter_sessions(chat)] == ["plan-1", "plan-2"]
+    assert [turn["session"] for turn in iter_turns(chat)] == ["plan-1", "plan-2"]
+    snapshot = snapshot_from_chat(chat, "beam-10m")
+
+    assert snapshot.rows[0].text.startswith("[Session plan-1 | 2025-01-01]")
+    assert snapshot.rows[1].session_id.endswith(":splan-2")

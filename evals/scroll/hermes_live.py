@@ -295,7 +295,7 @@ def load_beam_items(chats_root: Path, identifiers: Sequence[str]) -> list[Evalua
             history = []
             for turn in iter_turns(chat):
                 date = beam_date(turn["date"])
-                history.append(_history_row(int(turn["batch"]), date, turn["role"], turn["content"]))
+                history.append(_history_row(str(turn["session"]), date, turn["role"], turn["content"]))
             cache[key] = history, questions
         history, grouped_questions = cache[key]
         questions = grouped_questions.get(question_type)

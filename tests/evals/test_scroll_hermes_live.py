@@ -67,6 +67,22 @@ def test_beam_loader_exposes_only_public_probe(tmp_path):
     assert item.history[0]["content"].startswith("[Session 1 | 2025-01-01] user:")
 
 
+def test_beam_10m_loader_preserves_plan_session_labels(tmp_path):
+    root = tmp_path / "10M" / "1"
+    (root / "probing_questions").mkdir(parents=True)
+    (root / "chat.json").write_text(json.dumps([{"plan-1": [{
+        "batch_number": 1, "time_anchor": "January-01-2025",
+        "turns": [[{"id": "message-1", "role": "user", "content": "The branch is amber."}]],
+    }]}]), encoding="utf-8")
+    (root / "probing_questions" / "probing_questions.json").write_text(json.dumps({
+        "abstention": [{"question": "Which branch?", "rubric": ["private rubric"]}],
+    }), encoding="utf-8")
+
+    item = load_beam_items(tmp_path, ["beam/10M/1/abstention-0"])[0]
+
+    assert item.history[0]["content"].startswith("[Session plan-1 | 2025-01-01] user:")
+
+
 def test_agent_prompt_has_a_stable_sha256():
     assert len(agent_prompt_sha256()) == 64
     assert agent_prompt_sha256() == agent_prompt_sha256()
